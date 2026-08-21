@@ -370,6 +370,7 @@ async def direct_ml_offers(context, query, limit=25):
     slug = quote_plus(query).replace("+", "-")
 
     candidates = [
+        "https://www.mercadolivre.com.br/ofertas?category=MLB1246",
         f"https://lista.mercadolivre.com.br/{slug}",
         f"https://www.mercadolivre.com.br/ofertas?search={quote_plus(query)}",
     ]
