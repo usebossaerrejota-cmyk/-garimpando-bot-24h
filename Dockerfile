@@ -68,6 +68,61 @@ DIAG = {
 
 PRODUCT_URL_RE = re.compile(r"(MLB-?\d{6,}|/p/MLB\d+|/up/MLB\d+)", re.I)
 
+AFFILIATE_ID_RE = re.compile(r"MLB-?(\d{6,})", re.I)
+
+AFFILIATE_LINKS = {
+    "MLB22871761": "https://meli.la/2BdS776",
+    "MLB66128508": "https://meli.la/32RBZTS",
+    "MLB6093027": "https://meli.la/1s5pTFo",
+    "MLB24086423": "https://meli.la/2ypngPD",
+    "MLB51986596": "https://meli.la/29HQx6a",
+    "MLB8736693": "https://meli.la/2fyrnSC",
+    "MLB55232692": "https://meli.la/1B2hTwP",
+    "MLB36486322": "https://meli.la/1LqogvR",
+    "MLB65867205": "https://meli.la/2hiekbn",
+    "MLB53618239": "https://meli.la/2PuDrkG",
+    "MLB50269368": "https://meli.la/2kFZ497",
+    "MLB49652036": "https://meli.la/1BmHzUs",
+    "MLB62664301": "https://meli.la/2861Fow",
+    "MLB25327723": "https://meli.la/1x5AwZH",
+    "MLB51065768": "https://meli.la/1PEeB1j",
+    "MLB51342806": "https://meli.la/2vmjLm4",
+    "MLB25708528": "https://meli.la/2vfZQ4f",
+    "MLB49948227": "https://meli.la/1VCos6T",
+    "MLB16088420": "https://meli.la/2BukF8Q",
+    "MLB69225417": "https://meli.la/2UGY61V",
+    "MLB56408764": "https://meli.la/27pQCsQ",
+    "MLB18572364": "https://meli.la/2Z1NVAp",
+    "MLB66453791": "https://meli.la/26b3ahv",
+    "MLB7917167": "https://meli.la/2PVLaAA",
+    "MLB68487520": "https://meli.la/1cJSVku",
+    "MLB19880004": "https://meli.la/19rzsYk",
+    "MLB18572363": "https://meli.la/29pPhZC",
+    "MLB9033853": "https://meli.la/1ZgjcZV",
+    "MLB56328375": "https://meli.la/1bdckit",
+    "MLB53173424": "https://meli.la/2RWT4cN",
+    "MLB6287898": "https://meli.la/2PP1BFp",
+    "MLB74984894": "https://meli.la/2WWTkrx",
+    "MLB68260085": "https://meli.la/31bT7ue",
+    "MLB24399060": "https://meli.la/1SEHxBM",
+    "MLB22621721": "https://meli.la/2wt7nNs",
+    "MLB27920475": "https://meli.la/1Aa7wdy",
+    "MLB48515682": "https://meli.la/1QUUmfi",
+    "MLB6072138": "https://meli.la/2p7NR7c",
+    "MLB26703117": "https://meli.la/33CzN2A",
+    "MLB38886840": "https://meli.la/1miK3NR",
+}
+
+def resolve_affiliate_url(url):
+    if not url:
+        return None
+    m = AFFILIATE_ID_RE.search(url)
+    if not m:
+        return None
+    pid = "MLB" + m.group(1)
+    return AFFILIATE_LINKS.get(pid)
+
+
 def log(msg):
     print(f"[garimpando] {msg}", flush=True)
 
@@ -912,7 +967,7 @@ def caption(p):
 
     lines.extend([
         "",
-        f"🛍️ Comprar: {p['url']}",
+        f"🛍️ Comprar: {p.get('affiliate_url') or p['url']}",
         "",
         "Preço e disponibilidade podem mudar."
     ])
@@ -1004,6 +1059,9 @@ async def choose_products(
         ),
         reverse=True
     )
+
+    for p in selected:
+        p["affiliate_url"] = resolve_affiliate_url(p.get("url"))
 
     return selected[:quantity]
 
