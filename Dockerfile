@@ -211,6 +211,21 @@ def first_number(text):
         return None
 
 
+def parse_ml_fraction_price(text):
+    if not text:
+        return None
+
+    digits = re.sub(r"[^\d]", "", str(text))
+
+    if not digits:
+        return None
+
+    try:
+        return float(digits)
+    except Exception:
+        return None
+
+
 async def new_browser(p):
     browser = await p.chromium.launch(
         headless=True,
@@ -294,6 +309,147 @@ async def direct_ml_urls(context, query, limit=20):
             break
 
     return urls[:limit]
+
+
+async def direct_ml_offers(context, query, limit=25):
+    slug = quote_plus(query).replace("+", "-")
+
+    candidates = [
+        f"https://lista.mercadolivre.com.br/{slug}",
+        f"https://www.mercadolivre.com.br/ofertas?search={quote_plus(query)}",
+    ]
+
+    offers = []
+
+    for search_url in candidates:
+        page = await context.new_page()
+
+        try:
+            await page.goto(
+                search_url,
+                wait_until="domcontentloaded",
+                timeout=45000,
+            )
+
+            await page.wait_for_timeout(3500)
+
+            DIAG["last_title"] = (
+                await page.title()
+            )[:120]
+
+            raw_cards = await page.evaluate(
+                """
+                () => {
+                    const cards = document.querySelectorAll(
+                        'li.ui-search-layout__item, div.ui-search-result__wrapper'
+                    );
+                    const out = [];
+                    for (const card of cards) {
+                        const linkEl = card.querySelector(
+                            'a.poly-component__title, a.ui-search-link, ' +
+                            'a.ui-search-item__group__element, ' +
+                            'a[href*="mercadolivre.com.br"]'
+                        );
+                        if (!linkEl) continue;
+                        const titleEl = card.querySelector(
+                            '.poly-component__title, .ui-search-item__title'
+                        ) || linkEl;
+                        const curFrac = card.querySelector(
+                            '.poly-price__current .andes-money-amount__fraction, ' +
+                            '[class*="current"] .andes-money-amount__fraction'
+                        );
+                        const anyFrac = card.querySelector(
+                            '.andes-money-amount__fraction'
+                        );
+                        const priceEl = curFrac || anyFrac;
+                        const oldFrac = card.querySelector(
+                            's.andes-money-amount--previous .andes-money-amount__fraction, ' +
+                            '[class*="previous"] .andes-money-amount__fraction'
+                        );
+                        const discountEl = card.querySelector('.polylabel-pill');
+                        const imgEl = card.querySelector('img');
+                        out.push({
+                            href: linkEl.href || '',
+                            title: (titleEl.textContent || '').trim(),
+                            price: priceEl ? priceEl.textContent.trim() : null,
+                            oldPriceText: oldFrac ? oldFrac.textContent.trim() : null,
+                            discountText: discountEl ? discountEl.textContent.trim() : null,
+                            img: imgEl
+                                ? (imgEl.src || imgEl.getAttribute('data-src') || '')
+                                : '',
+                        });
+                    }
+                    return out;
+                }
+                """
+            )
+
+            log(
+                f"direct_ml_offers: url={search_url} final_url={page.url} "
+                f"title={DIAG['last_title']!r} cards={len(raw_cards)}"
+            )
+
+            for c in raw_cards:
+                clean_url = clean_ml_url(c.get("href") or "")
+
+                if not clean_url:
+                    continue
+
+                if any(o["url"] == clean_url for o in offers):
+                    continue
+
+                title = (c.get("title") or "").strip()
+
+                if not title:
+                    continue
+
+                price = parse_ml_fraction_price(c.get("price"))
+
+                if price is None:
+                    continue
+
+                old_price = parse_ml_fraction_price(
+                    c.get("oldPriceText")
+                )
+
+                discount = None
+                dtext = c.get("discountText") or ""
+                dm = re.search(r"(\d+)\s*%", dtext)
+
+                if dm:
+                    discount = int(dm.group(1))
+
+                offers.append({
+                    "url": clean_url,
+                    "title": title,
+                    "price": price,
+                    "old_price": old_price,
+                    "discount": discount,
+                    "image": c.get("img") or "",
+                    "shipping": "",
+                })
+
+                if len(offers) >= limit:
+                    break
+
+        except Exception as e:
+            STATE["last_error"] = (
+                f"ML ofertas direto: {type(e).__name__}"
+            )
+
+            log(
+                f"direct_ml_offers: ERROR em {search_url}: "
+                f"{type(e).__name__}: {e}"
+            )
+
+        finally:
+            await page.close()
+
+        if offers:
+            DIAG["source"] = "Mercado Livre direto (listagem)"
+            break
+
+    return offers[:limit]
 
 
 async def bing_urls(context, query, limit=20):
@@ -651,6 +807,31 @@ async def search_products(query, limit=10):
         browser, context = await new_browser(p)
 
         try:
+            offers = await direct_ml_offers(
+                context,
+                query,
+                limit=25
+            )
+
+            if offers:
+                DIAG["urls_found"] = len(offers)
+
+                log(
+                    f"search_products: {len(offers)} ofertas extraidas "
+                    f"direto da listagem"
+                )
+
+                products = offers[:limit]
+
+                DIAG["products"] = len(products)
+
+                return products
+
+            log(
+                "search_products: listagem direta nao trouxe ofertas, "
+                "tentando fallback por pagina de produto"
+            )
+
             urls = await direct_ml_urls(
                 context,
                 query,
