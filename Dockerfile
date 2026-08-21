@@ -1,14 +1,924 @@
+# syntax=docker/dockerfile:1.6
+
 FROM mcr.microsoft.com/playwright/python:v1.48.0-noble
+
 WORKDIR /app
-RUN mkdir -p /app && echo cHl0aG9uLXRlbGVncmFtLWJvdD09MjEuNgpwbGF5d3JpZ2h0PT0xLjQ4LjAKYmVhdXRpZnVsc291cDQ9PTQuMTIuMwpweXRob24tZG90ZW52PT0xLjAuMQpodHRweD09MC4yNy4yClBpbGxvdz09MTAuNC4wCg== | base64 -d > /app/requirements.txt
-RUN mkdir -p /app && echo ZnJvbSBhcHAuYm90IGltcG9ydCBtYWluCgppZiBfX25hbWVfXyA9PSAiX19tYWluX18iOgogICAgbWFpbigpCg== | base64 -d > /app/run.py
-RUN mkdir -p /app/app && echo  | base64 -d > /app/app/__init__.py
-RUN mkdir -p /app/app && echo ZnJvbSBkYXRhY2xhc3NlcyBpbXBvcnQgZGF0YWNsYXNzCgpAZGF0YWNsYXNzCmNsYXNzIFByb2R1Y3Q6CiAgICB0aXRsZTogc3RyCiAgICB1cmw6IHN0cgogICAgaW1hZ2U6IHN0ciA9ICIiCiAgICBwcmljZTogZmxvYXQgfCBOb25lID0gTm9uZQogICAgb2xkX3ByaWNlOiBmbG9hdCB8IE5vbmUgPSBOb25lCiAgICBkaXNjb3VudDogaW50IHwgTm9uZSA9IE5vbmUKICAgIHNoaXBwaW5nOiBzdHIgPSAiIgogICAgc2VsbGVyOiBzdHIgPSAiIgo= | base64 -d > /app/app/models.py
-RUN mkdir -p /app/app && echo aW1wb3J0IHNxbGl0ZTMKZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpjbGFzcyBTZWVuREI6CiAgICBkZWYgX19pbml0X18oc2VsZiwgcGF0aDogc3RyKToKICAgICAgICBzZWxmLnBhdGggPSBQYXRoKHBhdGgpCiAgICAgICAgc2VsZi5faW5pdCgpCgogICAgZGVmIF9jb25uZWN0KHNlbGYpOgogICAgICAgIHJldHVybiBzcWxpdGUzLmNvbm5lY3Qoc2VsZi5wYXRoKQoKICAgIGRlZiBfaW5pdChzZWxmKToKICAgICAgICB3aXRoIHNlbGYuX2Nvbm5lY3QoKSBhcyBjb246CiAgICAgICAgICAgIGNvbi5leGVjdXRlKCJDUkVBVEUgVEFCTEUgSUYgTk9UIEVYSVNUUyBzZWVuICh1cmwgVEVYVCBQUklNQVJZIEtFWSwgdGl0bGUgVEVYVCwgdHMgREFURVRJTUUgREVGQVVMVCBDVVJSRU5UX1RJTUVTVEFNUCkiKQoKICAgIGRlZiBoYXMoc2VsZiwgdXJsOiBzdHIpIC0+IGJvb2w6CiAgICAgICAgd2l0aCBzZWxmLl9jb25uZWN0KCkgYXMgY29uOgogICAgICAgICAgICByb3cgPSBjb24uZXhlY3V0ZSgiU0VMRUNUIDEgRlJPTSBzZWVuIFdIRVJFIHVybD0/IiwgKHVybCwpKS5mZXRjaG9uZSgpCiAgICAgICAgICAgIHJldHVybiByb3cgaXMgbm90IE5vbmUKCiAgICBkZWYgYWRkKHNlbGYsIHVybDogc3RyLCB0aXRsZTogc3RyKToKICAgICAgICB3aXRoIHNlbGYuX2Nvbm5lY3QoKSBhcyBjb246CiAgICAgICAgICAgIGNvbi5leGVjdXRlKCJJTlNFUlQgT1IgSUdOT1JFIElOVE8gc2Vlbih1cmwsdGl0bGUpIFZBTFVFUyg/LD8pIiwgKHVybCwgdGl0bGUpKQoKICAgIGRlZiBjbGVhcihzZWxmKToKICAgICAgICB3aXRoIHNlbGYuX2Nvbm5lY3QoKSBhcyBjb246CiAgICAgICAgICAgIGNvbi5leGVjdXRlKCJERUxFVEUgRlJPTSBzZWVuIikK | base64 -d > /app/app/db.py
-RUN mkdir -p /app/app && echo ZnJvbSAubW9kZWxzIGltcG9ydCBQcm9kdWN0CgpkZWYgYnJsKHZhbHVlOiBmbG9hdCB8IE5vbmUpIC0+IHN0cjoKICAgIGlmIHZhbHVlIGlzIE5vbmU6CiAgICAgICAgcmV0dXJuICJDb25zdWx0ZSBvIHByZcOnbyIKICAgIHJldHVybiBmIlIkIHt2YWx1ZTosLjJmfSIucmVwbGFjZSgiLCIsICJYIikucmVwbGFjZSgiLiIsICIsIikucmVwbGFjZSgiWCIsICIuIikKCmRlZiBtYWtlX2NhcHRpb24ocDogUHJvZHVjdCwgYWZmaWxpYXRlX3VybDogc3RyKSAtPiBzdHI6CiAgICBsaW5lcyA9IFsi8J+UpSBPRkVSVEEgTk8gTUVSQ0FETyBMSVZSRSIsICIiLCBwLnRpdGxlXQogICAgaWYgcC5vbGRfcHJpY2UgYW5kIHAucHJpY2UgYW5kIHAub2xkX3ByaWNlID4gcC5wcmljZToKICAgICAgICBsaW5lcyArPSBbZiJEZSB7YnJsKHAub2xkX3ByaWNlKX0iLCBmIlBvciAqe2JybChwLnByaWNlKX0qIl0KICAgIGVsaWYgcC5wcmljZToKICAgICAgICBsaW5lcyArPSBbZiJQb3IgKnticmwocC5wcmljZSl9KiJdCiAgICBpZiBwLmRpc2NvdW50OgogICAgICAgIGxpbmVzICs9IFtmIvCfkrgge3AuZGlzY291bnR9JSBPRkYiXQogICAgaWYgcC5zaGlwcGluZzoKICAgICAgICBsaW5lcyArPSBbZiLwn5qaIHtwLnNoaXBwaW5nfSJdCiAgICBsaW5lcyArPSBbIiIsIGYi8J+bkiBDb21wcmFyOiB7YWZmaWxpYXRlX3VybH0iLCAiIiwgIlByZcOnbyBlIGRpc3BvbmliaWxpZGFkZSBwb2RlbSBtdWRhciBhIHF1YWxxdWVyIG1vbWVudG8uIl0KICAgIHJldHVybiAiXG4iLmpvaW4obGluZXMpCg== | base64 -d > /app/app/caption.py
-RUN mkdir -p /app/app && echo aW1wb3J0IGFzeW5jaW8KaW1wb3J0IGpzb24KaW1wb3J0IHJlCmZyb20gdXJsbGliLnBhcnNlIGltcG9ydCBxdW90ZV9wbHVzLCB1cmxqb2luCmZyb20gYnM0IGltcG9ydCBCZWF1dGlmdWxTb3VwCmZyb20gcGxheXdyaWdodC5hc3luY19hcGkgaW1wb3J0IGFzeW5jX3BsYXl3cmlnaHQKZnJvbSAubW9kZWxzIGltcG9ydCBQcm9kdWN0CgpfTU9ORVlfUkUgPSByZS5jb21waWxlKHIiW14wLTksXSIpCgpkZWYgbW9uZXkodGV4dDogc3RyIHwgTm9uZSk6CiAgICBpZiBub3QgdGV4dDoKICAgICAgICByZXR1cm4gTm9uZQogICAgY2xlYW4gPSBfTU9ORVlfUkUuc3ViKCIiLCB0ZXh0KS5yZXBsYWNlKCIuIiwgIiIpLnJlcGxhY2UoIiwiLCAiLiIpCiAgICB0cnk6CiAgICAgICAgcmV0dXJuIGZsb2F0KGNsZWFuKQogICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICByZXR1cm4gTm9uZQoKY2xhc3MgTWVyY2Fkb0xpdnJlU2NyYXBlcjoKICAgIGRlZiBfX2luaXRfXyhzZWxmLCBoZWFkbGVzczogYm9vbCA9IEZhbHNlKToKICAgICAgICBzZWxmLmhlYWRsZXNzID0gaGVhZGxlc3MKCiAgICBhc3luYyBkZWYgc2VhcmNoKHNlbGYsIHF1ZXJ5OiBzdHIsIGxpbWl0OiBpbnQgPSAxMCkgLT4gbGlzdFtQcm9kdWN0XToKICAgICAgICB1cmwgPSBmImh0dHBzOi8vbGlzdGEubWVyY2Fkb2xpdnJlLmNvbS5ici97cXVvdGVfcGx1cyhxdWVyeSkucmVwbGFjZSgnKycsJy0nKX0iCiAgICAgICAgYXN5bmMgd2l0aCBhc3luY19wbGF5d3JpZ2h0KCkgYXMgcDoKICAgICAgICAgICAgYnJvd3NlciA9IGF3YWl0IHAuY2hyb21pdW0ubGF1bmNoKGhlYWRsZXNzPXNlbGYuaGVhZGxlc3MpCiAgICAgICAgICAgIHBhZ2UgPSBhd2FpdCBicm93c2VyLm5ld19wYWdlKHZpZXdwb3J0PXsid2lkdGgiOiAxNDQwLCAiaGVpZ2h0IjogMTEwMH0sIGxvY2FsZT0icHQtQlIiKQogICAgICAgICAgICBhd2FpdCBwYWdlLmdvdG8odXJsLCB3YWl0X3VudGlsPSJkb21jb250ZW50bG9hZGVkIiwgdGltZW91dD02MDAwMCkKICAgICAgICAgICAgYXdhaXQgcGFnZS53YWl0X2Zvcl90aW1lb3V0KDIyMDApCiAgICAgICAgICAgIGh0bWwgPSBhd2FpdCBwYWdlLmNvbnRlbnQoKQogICAgICAgICAgICBhd2FpdCBicm93c2VyLmNsb3NlKCkKICAgICAgICByZXR1cm4gc2VsZi5fcGFyc2Vfc2VhcmNoKGh0bWwsIGxpbWl0KQoKICAgIGRlZiBfcGFyc2Vfc2VhcmNoKHNlbGYsIGh0bWw6IHN0ciwgbGltaXQ6IGludCkgLT4gbGlzdFtQcm9kdWN0XToKICAgICAgICBzb3VwID0gQmVhdXRpZnVsU291cChodG1sLCAiaHRtbC5wYXJzZXIiKQogICAgICAgIG91dDogbGlzdFtQcm9kdWN0XSA9IFtdCiAgICAgICAgY2FyZHMgPSBzb3VwLnNlbGVjdCgibGkudWktc2VhcmNoLWxheW91dF9faXRlbSwgZGl2LnVpLXNlYXJjaC1yZXN1bHRfX3dyYXBwZXIiKQogICAgICAgIGZvciBjYXJkIGluIGNhcmRzOgogICAgICAgICAgICBhID0gY2FyZC5zZWxlY3Rfb25lKCJhLnBvbHktY29tcG9uZW50X190aXRsZSwgYS51aS1zZWFyY2gtbGluaywgYS51aS1zZWFyY2gtaXRlbV9fZ3JvdXBfX2VsZW1lbnQiKQogICAgICAgICAgICBpZiBub3QgYSBvciBub3QgYS5nZXQoImhyZWYiKToKICAgICAgICAgICAgICAgIGNvbnRpbnVlCiAgICAgICAgICAgIHRpdGxlID0gKGEuZ2V0X3RleHQoIiAiLCBzdHJpcD1UcnVlKSBvciBhLmdldCgidGl0bGUiKSBvciAiUHJvZHV0byIpLnN0cmlwKCkKICAgICAgICAgICAgdXJsID0gYVsiaHJlZiJdLnNwbGl0KCIjIilbMF0KICAgICAgICAgICAgaW1nX2VsID0gY2FyZC5zZWxlY3Rfb25lKCJpbWciKQogICAgICAgICAgICBpbWFnZSA9ICIiCiAgICAgICAgICAgIGlmIGltZ19lbDoKICAgICAgICAgICAgICAgIGltYWdlID0gaW1nX2VsLmdldCgiZGF0YS1zcmMiKSBvciBpbWdfZWwuZ2V0KCJzcmMiKSBvciAiIgogICAgICAgICAgICBwcmljZV9lbCA9IGNhcmQuc2VsZWN0X29uZSgiLmFuZGVzLW1vbmV5LWFtb3VudF9fZnJhY3Rpb24iKQogICAgICAgICAgICBwcmljZSA9IG1vbmV5KHByaWNlX2VsLmdldF90ZXh0KHN0cmlwPVRydWUpIGlmIHByaWNlX2VsIGVsc2UgTm9uZSkKICAgICAgICAgICAgb2xkX2VsID0gY2FyZC5zZWxlY3Rfb25lKCJzLmFuZGVzLW1vbmV5LWFtb3VudC0tcHJldmlvdXMgLmFuZGVzLW1vbmV5LWFtb3VudF9fZnJhY3Rpb24sIC5hbmRlcy1tb25leS1hbW91bnQtLXByZXZpb3VzIC5hbmRlcy1tb25leS1hbW91bnRfX2ZyYWN0aW9uIikKICAgICAgICAgICAgb2xkX3ByaWNlID0gbW9uZXkob2xkX2VsLmdldF90ZXh0KHN0cmlwPVRydWUpIGlmIG9sZF9lbCBlbHNlIE5vbmUpCiAgICAgICAgICAgIGRpc2NvdW50ID0gTm9uZQogICAgICAgICAgICBkaXNjX2VsID0gY2FyZC5zZWxlY3Rfb25lKCIuYW5kZXMtbW9uZXktYW1vdW50X19kaXNjb3VudCwgLnBvbHktcHJpY2VfX2Rpc2NfbGFiZWwiKQogICAgICAgICAgICBpZiBkaXNjX2VsOgogICAgICAgICAgICAgICAgbSA9IHJlLnNlYXJjaChyIihcZCspJSIsIGRpc2NfZWwuZ2V0X3RleHQoIiAiLCBzdHJpcD1UcnVlKSkKICAgICAgICAgICAgICAgIGlmIG06CiAgICAgICAgICAgICAgICAgICAgZGlzY291bnQgPSBpbnQobS5ncm91cCgxKSkKICAgICAgICAgICAgaWYgZGlzY291bnQgaXMgTm9uZSBhbmQgcHJpY2UgYW5kIG9sZF9wcmljZSBhbmQgb2xkX3ByaWNlID4gcHJpY2U6CiAgICAgICAgICAgICAgICBkaXNjb3VudCA9IHJvdW5kKCgxIC0gcHJpY2UgLyBvbGRfcHJpY2UpICogMTAwKQogICAgICAgICAgICBzaGlwcGluZyA9ICIiCiAgICAgICAgICAgIHRleHQgPSBjYXJkLmdldF90ZXh0KCIgIiwgc3RyaXA9VHJ1ZSkubG93ZXIoKQogICAgICAgICAgICBpZiAiZnJldGUgZ3LDoXRpcyIgaW4gdGV4dDoKICAgICAgICAgICAgICAgIHNoaXBwaW5nID0gIkZyZXRlIGdyw6F0aXMiCiAgICAgICAgICAgIG91dC5hcHBlbmQoUHJvZHVjdCh0aXRsZT10aXRsZSwgdXJsPXVybCwgaW1hZ2U9aW1hZ2UsIHByaWNlPXByaWNlLCBvbGRfcHJpY2U9b2xkX3ByaWNlLCBkaXNjb3VudD1kaXNjb3VudCwgc2hpcHBpbmc9c2hpcHBpbmcpKQogICAgICAgICAgICBpZiBsZW4ob3V0KSA+PSBsaW1pdDoKICAgICAgICAgICAgICAgIGJyZWFrCiAgICAgICAgcmV0dXJuIG91dAo= | base64 -d > /app/app/scraper.py
-RUN mkdir -p /app/app && echo ZnJvbSB1cmxsaWIucGFyc2UgaW1wb3J0IHF1b3RlCmltcG9ydCBvcwoKY2xhc3MgQWZmaWxpYXRlTGlua2VyOgogICAgIiIiQWZmaWxpYXRlIGxpbmsgYWRhcHRlci4KCiAgICBNZXJjYWRvIExpdnJlIGFmZmlsaWF0ZSBhdHRyaWJ1dGlvbiBzaG91bGQgdXNlIHRoZSBleGFjdCBtZWNoYW5pc20gcHJvdmlkZWQKICAgIGJ5IHRoZSBhZmZpbGlhdGUgYWNjb3VudC4gVGhpcyBtb2R1bGUgaW50ZW50aW9uYWxseSBhdm9pZHMgaW52ZW50aW5nIG9yCiAgICBndWVzc2luZyB0cmFja2luZyBwYXJhbWV0ZXJzLgogICAgIiIiCiAgICBkZWYgX19pbml0X18oc2VsZik6CiAgICAgICAgc2VsZi5zdHJhdGVneSA9IG9zLmdldGVudigiQUZGSUxJQVRFX1NUUkFURUdZIiwgInBhc3N0aHJvdWdoIikuc3RyaXAoKS5sb3dlcigpCiAgICAgICAgc2VsZi5zdWZmaXggPSBvcy5nZXRlbnYoIkFGRklMSUFURV9TVUZGSVgiLCAiIikuc3RyaXAoKQogICAgICAgIHNlbGYudGVtcGxhdGUgPSBvcy5nZXRlbnYoIkFGRklMSUFURV9URU1QTEFURSIsICIiKS5zdHJpcCgpCgogICAgZGVmIGJ1aWxkKHNlbGYsIHByb2R1Y3RfdXJsOiBzdHIpIC0+IHN0cjoKICAgICAgICBpZiBzZWxmLnN0cmF0ZWd5ID09ICJzdWZmaXgiIGFuZCBzZWxmLnN1ZmZpeDoKICAgICAgICAgICAgam9pbmVyID0gIiYiIGlmICI/IiBpbiBwcm9kdWN0X3VybCBlbHNlICI/IgogICAgICAgICAgICByZXR1cm4gZiJ7cHJvZHVjdF91cmx9e2pvaW5lcn17c2VsZi5zdWZmaXgubHN0cmlwKCc/JicpfSIKICAgICAgICBpZiBzZWxmLnN0cmF0ZWd5ID09ICJ0ZW1wbGF0ZSIgYW5kIHNlbGYudGVtcGxhdGU6CiAgICAgICAgICAgICMge3VybH0gcmVjZWl2ZXMgVVJMLWVuY29kZWQgcHJvZHVjdCBVUkw7IHtyYXdfdXJsfSBpcyB1bmVzY2FwZWQuCiAgICAgICAgICAgIHJldHVybiBzZWxmLnRlbXBsYXRlLnJlcGxhY2UoInt1cmx9IiwgcXVvdGUocHJvZHVjdF91cmwsIHNhZmU9IiIpKS5yZXBsYWNlKCJ7cmF3X3VybH0iLCBwcm9kdWN0X3VybCkKICAgICAgICByZXR1cm4gcHJvZHVjdF91cmwK | base64 -d > /app/app/affiliate.py
-RUN mkdir -p /app/app && echo aW1wb3J0IG9zCmltcG9ydCBhc3luY2lvCmZyb20gZGF0ZXRpbWUgaW1wb3J0IGRhdGV0aW1lLCB0aW1lem9uZQpmcm9tIGRvdGVudiBpbXBvcnQgbG9hZF9kb3RlbnYKZnJvbSB0ZWxlZ3JhbSBpbXBvcnQgVXBkYXRlLCBJbmxpbmVLZXlib2FyZEJ1dHRvbiwgSW5saW5lS2V5Ym9hcmRNYXJrdXAKZnJvbSB0ZWxlZ3JhbS5jb25zdGFudHMgaW1wb3J0IFBhcnNlTW9kZQpmcm9tIHRlbGVncmFtLmV4dCBpbXBvcnQgQXBwbGljYXRpb24sIENvbW1hbmRIYW5kbGVyLCBDYWxsYmFja1F1ZXJ5SGFuZGxlciwgQ29udGV4dFR5cGVzCmZyb20gLnNjcmFwZXIgaW1wb3J0IE1lcmNhZG9MaXZyZVNjcmFwZXIKZnJvbSAuYWZmaWxpYXRlIGltcG9ydCBBZmZpbGlhdGVMaW5rZXIKZnJvbSAuY2FwdGlvbiBpbXBvcnQgbWFrZV9jYXB0aW9uCmZyb20gLmRiIGltcG9ydCBTZWVuREIKCmxvYWRfZG90ZW52KCkKVE9LRU4gPSBvcy5nZXRlbnYoIlRFTEVHUkFNX0JPVF9UT0tFTiIsICIiKS5zdHJpcCgpCkhFQURMRVNTID0gb3MuZ2V0ZW52KCJIRUFETEVTUyIsICJ0cnVlIikubG93ZXIoKSA9PSAidHJ1ZSIKTUFYX1JFU1VMVFMgPSBpbnQob3MuZ2V0ZW52KCJNQVhfUkVTVUxUUyIsICIxMCIpKQpNSU5fRElTQ09VTlQgPSBpbnQob3MuZ2V0ZW52KCJNSU5fRElTQ09VTlQiLCAiMjAiKSkKQURNSU5fQ0hBVF9JRCA9IG9zLmdldGVudigiQURNSU5fQ0hBVF9JRCIsICIiKS5zdHJpcCgpClRBUkdFVF9DSEFUX0lEID0gb3MuZ2V0ZW52KCJUQVJHRVRfQ0hBVF9JRCIsICIiKS5zdHJpcCgpCkFVVE9fTU9ERSA9IG9zLmdldGVudigiQVVUT19NT0RFIiwgInRydWUiKS5sb3dlcigpID09ICJ0cnVlIgpBVVRPX0lOVEVSVkFMX01JTlVURVMgPSBtYXgoNSwgaW50KG9zLmdldGVudigiQVVUT19JTlRFUlZBTF9NSU5VVEVTIiwgIjE1IikpKQpBVVRPX1BPU1RTX1BFUl9DWUNMRSA9IG1heCgxLCBpbnQob3MuZ2V0ZW52KCJBVVRPX1BPU1RTX1BFUl9DWUNMRSIsICIxIikpKQpBVVRPX1FVRVJJRVMgPSBbcS5zdHJpcCgpIGZvciBxIGluIG9zLmdldGVudigKICAgICJBVVRPX1FVRVJJRVMiLAogICAgImJlbGV6YSxwZXJmdW1lLHNoYW1wb28sYWlyIGZyeWVyLGNhc2EsYWNhZGVtaWEsc3VwbGVtZW50byIKKS5zcGxpdCgiLCIpIGlmIHEuc3RyaXAoKV0KREIgPSBTZWVuREIob3MuZ2V0ZW52KCJEQl9QQVRIIiwgImdhcmltcGFuZG8uZGIiKSkKTElOS0VSID0gQWZmaWxpYXRlTGlua2VyKCkKU0NSQVBFUiA9IE1lcmNhZG9MaXZyZVNjcmFwZXIoaGVhZGxlc3M9SEVBRExFU1MpClNUQVRFID0geyJhdXRvIjogQVVUT19NT0RFLCAibGFzdF9ydW4iOiBOb25lLCAibGFzdF9lcnJvciI6IE5vbmUsICJjeWNsZXMiOiAwLCAicG9zdHMiOiAwfQoKCmRlZiBpc19hZG1pbihjaGF0X2lkKSAtPiBib29sOgogICAgcmV0dXJuIG5vdCBBRE1JTl9DSEFUX0lEIG9yIHN0cihjaGF0X2lkKSA9PSBBRE1JTl9DSEFUX0lECgoKZGVmIG1lbnUoKToKICAgIHJldHVybiBJbmxpbmVLZXlib2FyZE1hcmt1cChbCiAgICAgICAgW0lubGluZUtleWJvYXJkQnV0dG9uKCLwn5SOIEJ1c2NhciBvZmVydGEiLCBjYWxsYmFja19kYXRhPSJoZWxwX3NlYXJjaCIpLAogICAgICAgICBJbmxpbmVLZXlib2FyZEJ1dHRvbigi8J+TiiBTdGF0dXMiLCBjYWxsYmFja19kYXRhPSJzdGF0dXMiKV0sCiAgICAgICAgW0lubGluZUtleWJvYXJkQnV0dG9uKCLilrbvuI8gQXV0b23DoXRpY28iLCBjYWxsYmFja19kYXRhPSJhdXRvX29uIiksCiAgICAgICAgIElubGluZUtleWJvYXJkQnV0dG9uKCLij7ggUGF1c2FyIiwgY2FsbGJhY2tfZGF0YT0iYXV0b19vZmYiKV0sCiAgICBdKQoKCmFzeW5jIGRlZiBzdGFydCh1cGRhdGU6IFVwZGF0ZSwgY29udGV4dDogQ29udGV4dFR5cGVzLkRFRkFVTFRfVFlQRSk6CiAgICBpZiBub3QgaXNfYWRtaW4odXBkYXRlLmVmZmVjdGl2ZV9jaGF0LmlkKToKICAgICAgICByZXR1cm4KICAgIHRleHQgPSAoCiAgICAgICAgIkdhcmltcGFuZG8gQm90IDI0SCBhdGl2by5cblxuIgogICAgICAgICJWb2PDqiBjb250cm9sYSB0dWRvIHBvciBhcXVpIGUgbyBzZXJ2aWRvciBjb250aW51YSB0cmFiYWxoYW5kbyBzb3ppbmhvLlxuXG4iCiAgICAgICAgIkNvbWFuZG9zOlxuIgogICAgICAgICIvYnVzY2FyIGFpciBmcnllciDigJQgYnVzY2EgYWdvcmFcbiIKICAgICAgICAiL3N0YXR1cyDigJQgc2l0dWHDp8OjbyBkbyByb2LDtFxuIgogICAgICAgICIvaW5pY2lhciDigJQgbGlnYSBvIG1vZG8gYXV0b23DoXRpY29cbiIKICAgICAgICAiL3BhdXNhciDigJQgcGF1c2EgbyBtb2RvIGF1dG9tw6F0aWNvXG4iCiAgICAgICAgIi9saW1wYXIg4oCUIHplcmEgcHJvZHV0b3MgasOhIGVudmlhZG9zIgogICAgKQogICAgYXdhaXQgdXBkYXRlLm1lc3NhZ2UucmVwbHlfdGV4dCh0ZXh0LCByZXBseV9tYXJrdXA9bWVudSgpKQoKCmFzeW5jIGRlZiBzdGF0dXModXBkYXRlOiBVcGRhdGUsIGNvbnRleHQ6IENvbnRleHRUeXBlcy5ERUZBVUxUX1RZUEUpOgogICAgaWYgbm90IGlzX2FkbWluKHVwZGF0ZS5lZmZlY3RpdmVfY2hhdC5pZCk6CiAgICAgICAgcmV0dXJuCiAgICBsYXN0ID0gU1RBVEVbImxhc3RfcnVuIl0gb3IgImFpbmRhIG7Do28gZXhlY3V0b3UiCiAgICBlcnIgPSBTVEFURVsibGFzdF9lcnJvciJdIG9yICJuZW5odW0iCiAgICB0ZXh0ID0gKAogICAgICAgIGYiTW9kbyBhdXRvbcOhdGljbzogeydMSUdBRE8nIGlmIFNUQVRFWydhdXRvJ10gZWxzZSAnUEFVU0FETyd9XG4iCiAgICAgICAgZiJJbnRlcnZhbG86IHtBVVRPX0lOVEVSVkFMX01JTlVURVN9IG1pblxuIgogICAgICAgIGYiUG9zdHMgcG9yIGNpY2xvOiB7QVVUT19QT1NUU19QRVJfQ1lDTEV9XG4iCiAgICAgICAgZiJEZXNjb250byBtw61uaW1vOiB7TUlOX0RJU0NPVU5UfSVcbiIKICAgICAgICBmIkJ1c2NhczogeycsICcuam9pbihBVVRPX1FVRVJJRVMpfVxuIgogICAgICAgIGYiw5psdGltYSBleGVjdcOnw6NvOiB7bGFzdH1cbiIKICAgICAgICBmIkNpY2xvczoge1NUQVRFWydjeWNsZXMnXX0gfCBQb3N0czoge1NUQVRFWydwb3N0cyddfVxuIgogICAgICAgIGYiw5psdGltbyBlcnJvOiB7ZXJyfVxuIgogICAgICAgIGYiQWZpbGlhZG86IHtMSU5LRVIuc3RyYXRlZ3l9IgogICAgKQogICAgaWYgdXBkYXRlLmNhbGxiYWNrX3F1ZXJ5OgogICAgICAgIGF3YWl0IHVwZGF0ZS5jYWxsYmFja19xdWVyeS5hbnN3ZXIoKQogICAgICAgIGF3YWl0IHVwZGF0ZS5jYWxsYmFja19xdWVyeS5tZXNzYWdlLnJlcGx5X3RleHQodGV4dCwgcmVwbHlfbWFya3VwPW1lbnUoKSkKICAgIGVsc2U6CiAgICAgICAgYXdhaXQgdXBkYXRlLm1lc3NhZ2UucmVwbHlfdGV4dCh0ZXh0LCByZXBseV9tYXJrdXA9bWVudSgpKQoKCmFzeW5jIGRlZiBsaW1wYXIodXBkYXRlOiBVcGRhdGUsIGNvbnRleHQ6IENvbnRleHRUeXBlcy5ERUZBVUxUX1RZUEUpOgogICAgaWYgbm90IGlzX2FkbWluKHVwZGF0ZS5lZmZlY3RpdmVfY2hhdC5pZCk6CiAgICAgICAgcmV0dXJuCiAgICBEQi5jbGVhcigpCiAgICBhd2FpdCB1cGRhdGUubWVzc2FnZS5yZXBseV90ZXh0KCJIaXN0w7NyaWNvIGxpbXBvLiIpCgoKYXN5bmMgZGVmIGluaWNpYXIodXBkYXRlOiBVcGRhdGUsIGNvbnRleHQ6IENvbnRleHRUeXBlcy5ERUZBVUxUX1RZUEUpOgogICAgaWYgbm90IGlzX2FkbWluKHVwZGF0ZS5lZmZlY3RpdmVfY2hhdC5pZCk6CiAgICAgICAgcmV0dXJuCiAgICBTVEFURVsiYXV0byJdID0gVHJ1ZQogICAgYXdhaXQgdXBkYXRlLm1lc3NhZ2UucmVwbHlfdGV4dCgiTW9kbyBhdXRvbcOhdGljbyBsaWdhZG8uIE8gc2Vydmlkb3IgY29udGludWFyw6EgYnVzY2FuZG8gZSBwdWJsaWNhbmRvIHNvemluaG8uIiwgcmVwbHlfbWFya3VwPW1lbnUoKSkKCgphc3luYyBkZWYgcGF1c2FyKHVwZGF0ZTogVXBkYXRlLCBjb250ZXh0OiBDb250ZXh0VHlwZXMuREVGQVVMVF9UWVBFKToKICAgIGlmIG5vdCBpc19hZG1pbih1cGRhdGUuZWZmZWN0aXZlX2NoYXQuaWQpOgogICAgICAgIHJldHVybgogICAgU1RBVEVbImF1dG8iXSA9IEZhbHNlCiAgICBhd2FpdCB1cGRhdGUubWVzc2FnZS5yZXBseV90ZXh0KCJNb2RvIGF1dG9tw6F0aWNvIHBhdXNhZG8uIiwgcmVwbHlfbWFya3VwPW1lbnUoKSkKCgphc3luYyBkZWYgc2VuZF9wcm9kdWN0KGJvdCwgY2hhdF9pZCwgcCk6CiAgICBhZmZpbGlhdGVfdXJsID0gTElOS0VSLmJ1aWxkKHAudXJsKQogICAgY2FwdGlvbiA9IG1ha2VfY2FwdGlvbihwLCBhZmZpbGlhdGVfdXJsKQogICAgaWYgcC5pbWFnZToKICAgICAgICB0cnk6CiAgICAgICAgICAgIGF3YWl0IGJvdC5zZW5kX3Bob3RvKGNoYXRfaWQ9Y2hhdF9pZCwgcGhvdG89cC5pbWFnZSwgY2FwdGlvbj1jYXB0aW9uLCBwYXJzZV9tb2RlPVBhcnNlTW9kZS5NQVJLRE9XTikKICAgICAgICBleGNlcHQgRXhjZXB0aW9uOgogICAgICAgICAgICBhd2FpdCBib3Quc2VuZF9tZXNzYWdlKGNoYXRfaWQ9Y2hhdF9pZCwgdGV4dD1jYXB0aW9uLCBkaXNhYmxlX3dlYl9wYWdlX3ByZXZpZXc9RmFsc2UpCiAgICBlbHNlOgogICAgICAgIGF3YWl0IGJvdC5zZW5kX21lc3NhZ2UoY2hhdF9pZD1jaGF0X2lkLCB0ZXh0PWNhcHRpb24sIGRpc2FibGVfd2ViX3BhZ2VfcHJldmlldz1GYWxzZSkKICAgIERCLmFkZChwLnVybCwgcC50aXRsZSkKICAgIFNUQVRFWyJwb3N0cyJdICs9IDEKCgphc3luYyBkZWYgcGlja19wcm9kdWN0cyhxdWVyeTogc3RyLCBxdWFudGl0eTogaW50KToKICAgIHByb2R1Y3RzID0gYXdhaXQgU0NSQVBFUi5zZWFyY2gocXVlcnksIGxpbWl0PW1heChxdWFudGl0eSAqIDgsIDMwKSkKICAgIGNhbmRpZGF0ZXMgPSBbXQogICAgZm9yIHAgaW4gcHJvZHVjdHM6CiAgICAgICAgaWYgREIuaGFzKHAudXJsKToKICAgICAgICAgICAgY29udGludWUKICAgICAgICBpZiBwLmRpc2NvdW50IGlzIG5vdCBOb25lIGFuZCBwLmRpc2NvdW50IDwgTUlOX0RJU0NPVU5UOgogICAgICAgICAgICBjb250aW51ZQogICAgICAgIGlmIG5vdCBwLnByaWNlOgogICAgICAgICAgICBjb250aW51ZQogICAgICAgIGNhbmRpZGF0ZXMuYXBwZW5kKHApCiAgICBjYW5kaWRhdGVzLnNvcnQoa2V5PWxhbWJkYSBwOiAocC5kaXNjb3VudCBvciAwLCBib29sKHAuc2hpcHBpbmcpKSwgcmV2ZXJzZT1UcnVlKQogICAgcmV0dXJuIGNhbmRpZGF0ZXNbOnF1YW50aXR5XQoKCmFzeW5jIGRlZiBidXNjYXIodXBkYXRlOiBVcGRhdGUsIGNvbnRleHQ6IENvbnRleHRUeXBlcy5ERUZBVUxUX1RZUEUpOgogICAgaWYgbm90IGlzX2FkbWluKHVwZGF0ZS5lZmZlY3RpdmVfY2hhdC5pZCk6CiAgICAgICAgcmV0dXJuCiAgICBxdWVyeSA9ICIgIi5qb2luKGNvbnRleHQuYXJncykuc3RyaXAoKQogICAgaWYgbm90IHF1ZXJ5OgogICAgICAgIGF3YWl0IHVwZGF0ZS5tZXNzYWdlLnJlcGx5X3RleHQoIlVzZTogL2J1c2NhciBub21lIGRvIHByb2R1dG8iKQogICAgICAgIHJldHVybgogICAgYXdhaXQgdXBkYXRlLm1lc3NhZ2UucmVwbHlfdGV4dChmIkJ1c2NhbmRvIG9mZXJ0YXMgZGU6IHtxdWVyeX0iKQogICAgdHJ5OgogICAgICAgIHNlbGVjdGVkID0gYXdhaXQgcGlja19wcm9kdWN0cyhxdWVyeSwgTUFYX1JFU1VMVFMpCiAgICAgICAgaWYgbm90IHNlbGVjdGVkOgogICAgICAgICAgICBhd2FpdCB1cGRhdGUubWVzc2FnZS5yZXBseV90ZXh0KCJOw6NvIGFjaGVpIG9mZXJ0YXMgbm92YXMgY29tIG9zIGZpbHRyb3MgYXR1YWlzLiIpCiAgICAgICAgICAgIHJldHVybgogICAgICAgIGZvciBwIGluIHNlbGVjdGVkOgogICAgICAgICAgICBhd2FpdCBzZW5kX3Byb2R1Y3QoY29udGV4dC5ib3QsIHVwZGF0ZS5lZmZlY3RpdmVfY2hhdC5pZCwgcCkKICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgZToKICAgICAgICBhd2FpdCB1cGRhdGUubWVzc2FnZS5yZXBseV90ZXh0KGYiTsOjbyBjb25zZWd1aSBjb25jbHVpciBhIGJ1c2NhIGFnb3JhOiB7dHlwZShlKS5fX25hbWVfX30iKQoKCmFzeW5jIGRlZiBhdXRvX2N5Y2xlKGFwcDogQXBwbGljYXRpb24pOgogICAgaWYgbm90IFRBUkdFVF9DSEFUX0lEOgogICAgICAgIFNUQVRFWyJsYXN0X2Vycm9yIl0gPSAiVEFSR0VUX0NIQVRfSUQgbsOjbyBjb25maWd1cmFkbyIKICAgICAgICByZXR1cm4KICAgIHNlbnQgPSAwCiAgICBmb3IgcXVlcnkgaW4gQVVUT19RVUVSSUVTOgogICAgICAgIGlmIHNlbnQgPj0gQVVUT19QT1NUU19QRVJfQ1lDTEU6CiAgICAgICAgICAgIGJyZWFrCiAgICAgICAgdHJ5OgogICAgICAgICAgICBwaWNrcyA9IGF3YWl0IHBpY2tfcHJvZHVjdHMocXVlcnksIDEpCiAgICAgICAgICAgIGlmIHBpY2tzOgogICAgICAgICAgICAgICAgYXdhaXQgc2VuZF9wcm9kdWN0KGFwcC5ib3QsIFRBUkdFVF9DSEFUX0lELCBwaWNrc1swXSkKICAgICAgICAgICAgICAgIHNlbnQgKz0gMQogICAgICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgZToKICAgICAgICAgICAgU1RBVEVbImxhc3RfZXJyb3IiXSA9IGYie3F1ZXJ5fToge3R5cGUoZSkuX19uYW1lX199IgogICAgU1RBVEVbImxhc3RfcnVuIl0gPSBkYXRldGltZS5ub3codGltZXpvbmUudXRjKS5hc3RpbWV6b25lKCkuc3RyZnRpbWUoIiVkLyVtLyVZICVIOiVNIikKICAgIFNUQVRFWyJjeWNsZXMiXSArPSAxCiAgICBpZiBzZW50OgogICAgICAgIFNUQVRFWyJsYXN0X2Vycm9yIl0gPSBOb25lCgoKYXN5bmMgZGVmIGF1dG9fd29ya2VyKGFwcDogQXBwbGljYXRpb24pOgogICAgYXdhaXQgYXN5bmNpby5zbGVlcCg4KQogICAgd2hpbGUgVHJ1ZToKICAgICAgICBpZiBTVEFURVsiYXV0byJdOgogICAgICAgICAgICBhd2FpdCBhdXRvX2N5Y2xlKGFwcCkKICAgICAgICBhd2FpdCBhc3luY2lvLnNsZWVwKEFVVE9fSU5URVJWQUxfTUlOVVRFUyAqIDYwKQoKCmFzeW5jIGRlZiBwb3N0X2luaXQoYXBwOiBBcHBsaWNhdGlvbik6CiAgICBhcHAuY3JlYXRlX3Rhc2soYXV0b193b3JrZXIoYXBwKSkKCgphc3luYyBkZWYgYnV0dG9ucyh1cGRhdGU6IFVwZGF0ZSwgY29udGV4dDogQ29udGV4dFR5cGVzLkRFRkFVTFRfVFlQRSk6CiAgICBxID0gdXBkYXRlLmNhbGxiYWNrX3F1ZXJ5CiAgICBpZiBub3QgaXNfYWRtaW4ocS5tZXNzYWdlLmNoYXQuaWQpOgogICAgICAgIHJldHVybgogICAgYXdhaXQgcS5hbnN3ZXIoKQogICAgaWYgcS5kYXRhID09ICJhdXRvX29uIjoKICAgICAgICBTVEFURVsiYXV0byJdID0gVHJ1ZQogICAgICAgIGF3YWl0IHEubWVzc2FnZS5yZXBseV90ZXh0KCJNb2RvIGF1dG9tw6F0aWNvIGxpZ2Fkby4iLCByZXBseV9tYXJrdXA9bWVudSgpKQogICAgZWxpZiBxLmRhdGEgPT0gImF1dG9fb2ZmIjoKICAgICAgICBTVEFURVsiYXV0byJdID0gRmFsc2UKICAgICAgICBhd2FpdCBxLm1lc3NhZ2UucmVwbHlfdGV4dCgiTW9kbyBhdXRvbcOhdGljbyBwYXVzYWRvLiIsIHJlcGx5X21hcmt1cD1tZW51KCkpCiAgICBlbGlmIHEuZGF0YSA9PSAic3RhdHVzIjoKICAgICAgICBhd2FpdCBzdGF0dXModXBkYXRlLCBjb250ZXh0KQogICAgZWxpZiBxLmRhdGEgPT0gImhlbHBfc2VhcmNoIjoKICAgICAgICBhd2FpdCBxLm1lc3NhZ2UucmVwbHlfdGV4dCgiRGlnaXRlLCBwb3IgZXhlbXBsbzogL2J1c2NhciBwZXJmdW1lIGltcG9ydGFkbyIpCgoKZGVmIG1haW4oKToKICAgIGlmIG5vdCBUT0tFTjoKICAgICAgICByYWlzZSBTeXN0ZW1FeGl0KCJEZWZpbmEgVEVMRUdSQU1fQk9UX1RPS0VOIG5hcyB2YXJpw6F2ZWlzIGRvIHNlcnZpZG9yIikKICAgIGFwcCA9IEFwcGxpY2F0aW9uLmJ1aWxkZXIoKS50b2tlbihUT0tFTikucG9zdF9pbml0KHBvc3RfaW5pdCkuYnVpbGQoKQogICAgYXBwLmFkZF9oYW5kbGVyKENvbW1hbmRIYW5kbGVyKCJzdGFydCIsIHN0YXJ0KSkKICAgIGFwcC5hZGRfaGFuZGxlcihDb21tYW5kSGFuZGxlcigiYnVzY2FyIiwgYnVzY2FyKSkKICAgIGFwcC5hZGRfaGFuZGxlcihDb21tYW5kSGFuZGxlcigic3RhdHVzIiwgc3RhdHVzKSkKICAgIGFwcC5hZGRfaGFuZGxlcihDb21tYW5kSGFuZGxlcigibGltcGFyIiwgbGltcGFyKSkKICAgIGFwcC5hZGRfaGFuZGxlcihDb21tYW5kSGFuZGxlcigiaW5pY2lhciIsIGluaWNpYXIpKQogICAgYXBwLmFkZF9oYW5kbGVyKENvbW1hbmRIYW5kbGVyKCJwYXVzYXIiLCBwYXVzYXIpKQogICAgYXBwLmFkZF9oYW5kbGVyKENhbGxiYWNrUXVlcnlIYW5kbGVyKGJ1dHRvbnMpKQogICAgYXBwLnJ1bl9wb2xsaW5nKGFsbG93ZWRfdXBkYXRlcz1VcGRhdGUuQUxMX1RZUEVTKQoKCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICBtYWluKCkK | base64 -d > /app/app/bot.py
-RUN pip install --no-cache-dir -r /app/requirements.txt
+
+RUN pip install --no-cache-dir \
+    python-telegram-bot==21.6 \
+    playwright==1.48.0 \
+    beautifulsoup4==4.12.3 \
+    httpx==0.27.2 \
+    python-dotenv==1.0.1
+
+RUN cat > /app/bot.py <<'PY'
+import os
+import re
+import json
+import asyncio
+import sqlite3
+from datetime import datetime
+from urllib.parse import quote_plus
+
+from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
+
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TARGET_CHAT_ID = os.getenv("TARGET_CHAT_ID", "").strip()
+
+MIN_DISCOUNT = int(os.getenv("MIN_DISCOUNT", "0"))
+MAX_RESULTS = int(os.getenv("MAX_RESULTS", "5"))
+
+AUTO_INTERVAL_MINUTES = max(
+    5, int(os.getenv("AUTO_INTERVAL_MINUTES", "15"))
+)
+
+AUTO_QUERIES = [
+    x.strip()
+    for x in os.getenv(
+        "AUTO_QUERIES",
+        "beleza,perfume,shampoo,air fryer,casa,academia,suplemento"
+    ).split(",")
+    if x.strip()
+]
+
+STATE = {
+    "auto": True,
+    "last_run": None,
+    "last_error": None,
+    "cycles": 0,
+    "posts": 0,
+}
+
+DB_PATH = "/app/garimpando.db"
+
+
+def db_connect():
+    return sqlite3.connect(DB_PATH)
+
+
+def db_init():
+    with db_connect() as con:
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS seen (
+                url TEXT PRIMARY KEY,
+                title TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+
+def db_has(url):
+    with db_connect() as con:
+        row = con.execute(
+            "SELECT 1 FROM seen WHERE url=?",
+            (url,)
+        ).fetchone()
+        return row is not None
+
+
+def db_add(url, title):
+    with db_connect() as con:
+        con.execute(
+            "INSERT OR IGNORE INTO seen(url,title) VALUES (?,?)",
+            (url, title)
+        )
+
+
+def db_clear():
+    with db_connect() as con:
+        con.execute("DELETE FROM seen")
+
+
+def menu():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "🔎 Buscar oferta",
+                callback_data="help_search"
+            ),
+            InlineKeyboardButton(
+                "📊 Status",
+                callback_data="status"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "▶️ Automático",
+                callback_data="auto_on"
+            ),
+            InlineKeyboardButton(
+                "⏸️ Pausar",
+                callback_data="auto_off"
+            ),
+        ],
+    ])
+
+
+def brl(value):
+    if value is None:
+        return "Consulte o preço"
+
+    text = f"{value:,.2f}"
+    text = text.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {text}"
+
+
+def parse_money(text):
+    if not text:
+        return None
+
+    m = re.search(
+        r"R\$\s*([\d\.]+)(?:,(\d{1,2}))?",
+        text
+    )
+
+    if not m:
+        return None
+
+    inteiro = m.group(1).replace(".", "")
+    decimal = m.group(2) or "00"
+
+    try:
+        return float(f"{inteiro}.{decimal}")
+    except Exception:
+        return None
+
+
+def clean_url(url):
+    if not url:
+        return ""
+
+    url = url.split("#")[0]
+
+    if "mercadolivre.com.br" not in url:
+        return ""
+
+    if "/p/" in url:
+        return url
+
+    if "/MLB-" in url or "MLB-" in url:
+        return url
+
+    return url
+
+
+async def scrape_mercado_livre(query, limit=20):
+    slug = quote_plus(query).replace("+", "-")
+    url = f"https://lista.mercadolivre.com.br/{slug}"
+
+    products = []
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-blink-features=AutomationControlled",
+            ],
+        )
+
+        context = await browser.new_context(
+            locale="pt-BR",
+            viewport={"width": 1365, "height": 900},
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+        )
+
+        page = await context.new_page()
+
+        try:
+            await page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=60000,
+            )
+
+            await page.wait_for_timeout(4000)
+
+            try:
+                await page.mouse.wheel(0, 1600)
+                await page.wait_for_timeout(1200)
+            except Exception:
+                pass
+
+            html = await page.content()
+
+        finally:
+            await browser.close()
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    selectors = [
+        "li.ui-search-layout__item",
+        "div.ui-search-result__wrapper",
+        "[class*='ui-search-layout__item']",
+        "[class*='poly-card']",
+        "[class*='ui-search-result']",
+    ]
+
+    cards = []
+
+    for selector in selectors:
+        found = soup.select(selector)
+
+        if len(found) >= 3:
+            cards = found
+            break
+
+    seen_urls = set()
+
+    for card in cards:
+        anchors = card.find_all("a", href=True)
+
+        href = ""
+        title = ""
+
+        for a in anchors:
+            candidate = clean_url(a.get("href", ""))
+
+            if not candidate:
+                continue
+
+            href = candidate
+
+            title_node = (
+                a.select_one(
+                    ".poly-component__title"
+                )
+                or a.select_one(
+                    ".ui-search-item__title"
+                )
+                or a.select_one("h2")
+            )
+
+            if title_node:
+                title = title_node.get_text(
+                    " ",
+                    strip=True
+                )
+
+            if not title:
+                title = a.get_text(
+                    " ",
+                    strip=True
+                )
+
+            if href:
+                break
+
+        if not href or href in seen_urls:
+            continue
+
+        if not title or len(title) < 5:
+            title_node = (
+                card.select_one(".poly-component__title")
+                or card.select_one(".ui-search-item__title")
+                or card.select_one("h2")
+                or card.select_one("h3")
+            )
+
+            if title_node:
+                title = title_node.get_text(
+                    " ",
+                    strip=True
+                )
+
+        if not title or len(title) < 5:
+            continue
+
+        text = card.get_text(
+            " ",
+            strip=True
+        )
+
+        prices = []
+
+        for money_el in card.select(
+            ".andes-money-amount, "
+            "[class*='money-amount']"
+        ):
+            value = parse_money(
+                money_el.get_text(
+                    " ",
+                    strip=True
+                )
+            )
+
+            if value and value not in prices:
+                prices.append(value)
+
+        if not prices:
+            for raw in re.findall(
+                r"R\$\s*[\d\.]+(?:,\d{1,2})?",
+                text
+            ):
+                value = parse_money(raw)
+
+                if value and value not in prices:
+                    prices.append(value)
+
+        price = None
+        old_price = None
+
+        if prices:
+            price = prices[-1]
+
+            if len(prices) >= 2:
+                possible_old = prices[0]
+
+                if possible_old > price:
+                    old_price = possible_old
+
+        discount = None
+
+        dm = re.search(
+            r"(\d{1,2})\s*%\s*(?:OFF|off|desconto)?",
+            text
+        )
+
+        if dm:
+            try:
+                discount = int(dm.group(1))
+            except Exception:
+                pass
+
+        if (
+            discount is None
+            and price
+            and old_price
+            and old_price > price
+        ):
+            discount = round(
+                (1 - price / old_price) * 100
+            )
+
+        image = ""
+
+        img = card.find("img")
+
+        if img:
+            image = (
+                img.get("data-src")
+                or img.get("data-lazy")
+                or img.get("src")
+                or ""
+            )
+
+        shipping = ""
+
+        if "frete grátis" in text.lower():
+            shipping = "Frete grátis"
+
+        products.append({
+            "title": title[:180],
+            "url": href,
+            "image": image,
+            "price": price,
+            "old_price": old_price,
+            "discount": discount,
+            "shipping": shipping,
+        })
+
+        seen_urls.add(href)
+
+        if len(products) >= limit:
+            break
+
+    if products:
+        return products
+
+    # Fallback: tenta encontrar produtos estruturados dentro da página
+    for script in soup.find_all(
+        "script",
+        type="application/ld+json"
+    ):
+        raw = script.string
+
+        if not raw:
+            continue
+
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+
+        blocks = (
+            data
+            if isinstance(data, list)
+            else [data]
+        )
+
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+
+            items = block.get("itemListElement", [])
+
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+
+                obj = item.get("item", item)
+
+                if not isinstance(obj, dict):
+                    continue
+
+                href = clean_url(
+                    obj.get("url", "")
+                )
+
+                title = (
+                    obj.get("name")
+                    or obj.get("title")
+                    or ""
+                )
+
+                if not href or not title:
+                    continue
+
+                products.append({
+                    "title": title[:180],
+                    "url": href,
+                    "image": obj.get("image", ""),
+                    "price": None,
+                    "old_price": None,
+                    "discount": None,
+                    "shipping": "",
+                })
+
+                if len(products) >= limit:
+                    return products
+
+    return products
+
+
+def make_caption(p):
+    lines = [
+        "🔥 OFERTA NO MERCADO LIVRE",
+        "",
+        p["title"],
+        "",
+    ]
+
+    if (
+        p["old_price"]
+        and p["price"]
+        and p["old_price"] > p["price"]
+    ):
+        lines.append(
+            f"De {brl(p['old_price'])}"
+        )
+        lines.append(
+            f"Por *{brl(p['price'])}*"
+        )
+    elif p["price"]:
+        lines.append(
+            f"Por *{brl(p['price'])}*"
+        )
+
+    if p["discount"]:
+        lines.append(
+            f"💸 {p['discount']}% OFF"
+        )
+
+    if p["shipping"]:
+        lines.append(
+            f"🚚 {p['shipping']}"
+        )
+
+    lines.extend([
+        "",
+        f"🛍️ Comprar: {p['url']}",
+        "",
+        "Preço e disponibilidade podem mudar a qualquer momento.",
+    ])
+
+    return "\n".join(lines)
+
+
+async def send_product(bot, chat_id, p):
+    caption = make_caption(p)
+
+    if p.get("image"):
+        try:
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=p["image"],
+                caption=caption,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+            db_add(
+                p["url"],
+                p["title"]
+            )
+
+            STATE["posts"] += 1
+            return
+
+        except Exception:
+            pass
+
+    await bot.send_message(
+        chat_id=chat_id,
+        text=caption,
+        parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=False,
+    )
+
+    db_add(
+        p["url"],
+        p["title"]
+    )
+
+    STATE["posts"] += 1
+
+
+async def choose_products(
+    query,
+    quantity=5,
+    ignore_history=False
+):
+    products = await scrape_mercado_livre(
+        query,
+        limit=max(20, quantity * 5)
+    )
+
+    chosen = []
+
+    for p in products:
+        if (
+            not ignore_history
+            and db_has(p["url"])
+        ):
+            continue
+
+        discount = p.get("discount")
+
+        if (
+            discount is not None
+            and discount < MIN_DISCOUNT
+        ):
+            continue
+
+        # Produto sem desconto explícito ainda pode entrar
+        # quando o filtro está em zero.
+        if (
+            discount is None
+            and MIN_DISCOUNT > 0
+        ):
+            continue
+
+        chosen.append(p)
+
+    chosen.sort(
+        key=lambda x: (
+            x.get("discount") or 0,
+            bool(x.get("shipping")),
+        ),
+        reverse=True,
+    )
+
+    return chosen[:quantity]
+
+
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    text = (
+        "Garimpando Bot 24H ativo.\n\n"
+        "Você controla tudo por aqui e o servidor "
+        "continua trabalhando sozinho.\n\n"
+        "Comandos:\n"
+        "/buscar air fryer — busca agora\n"
+        "/status — situação do robô\n"
+        "/iniciar — liga o modo automático\n"
+        "/pausar — pausa o modo automático\n"
+        "/limpar — zera produtos já enviados"
+    )
+
+    await update.message.reply_text(
+        text,
+        reply_markup=menu()
+    )
+
+
+async def status(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    last = (
+        STATE["last_run"]
+        or "ainda não executou"
+    )
+
+    err = (
+        STATE["last_error"]
+        or "nenhum"
+    )
+
+    text = (
+        f"Modo automático: "
+        f"{'LIGADO' if STATE['auto'] else 'PAUSADO'}\n"
+        f"Intervalo: {AUTO_INTERVAL_MINUTES} min\n"
+        f"Posts por ciclo: 1\n"
+        f"Desconto mínimo: {MIN_DISCOUNT}%\n"
+        f"Buscas: {', '.join(AUTO_QUERIES)}\n"
+        f"Última execução: {last}\n"
+        f"Ciclos: {STATE['cycles']} | "
+        f"Posts: {STATE['posts']}\n"
+        f"Último erro: {err}\n"
+        f"Afiliado: passthrough"
+    )
+
+    if update.callback_query:
+        await update.callback_query.answer()
+
+        await update.callback_query.message.reply_text(
+            text,
+            reply_markup=menu()
+        )
+    else:
+        await update.message.reply_text(
+            text,
+            reply_markup=menu()
+        )
+
+
+async def buscar(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    query = " ".join(
+        context.args
+    ).strip()
+
+    if not query:
+        await update.message.reply_text(
+            "Use, por exemplo:\n"
+            "/buscar perfume"
+        )
+        return
+
+    await update.message.reply_text(
+        f"Buscando ofertas de: {query}"
+    )
+
+    try:
+        selected = await choose_products(
+            query,
+            quantity=MAX_RESULTS,
+            ignore_history=True,
+        )
+
+        if not selected:
+            await update.message.reply_text(
+                "Não encontrei produtos nessa busca agora. "
+                "Vou tentar novamente no próximo ciclo."
+            )
+            return
+
+        for p in selected:
+            await send_product(
+                context.bot,
+                update.effective_chat.id,
+                p
+            )
+
+        STATE["last_error"] = None
+
+    except Exception as e:
+        STATE["last_error"] = (
+            f"{type(e).__name__}: {str(e)[:120]}"
+        )
+
+        await update.message.reply_text(
+            f"Erro na busca: {type(e).__name__}"
+        )
+
+
+async def limpar(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    db_clear()
+
+    await update.message.reply_text(
+        "Histórico de produtos limpo."
+    )
+
+
+async def iniciar(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    STATE["auto"] = True
+
+    await update.message.reply_text(
+        "Modo automático ligado.",
+        reply_markup=menu()
+    )
+
+
+async def pausar(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    STATE["auto"] = False
+
+    await update.message.reply_text(
+        "Modo automático pausado.",
+        reply_markup=menu()
+    )
+
+
+async def auto_cycle(app):
+    if not TARGET_CHAT_ID:
+        STATE["last_error"] = (
+            "TARGET_CHAT_ID não configurado"
+        )
+        return
+
+    for query in AUTO_QUERIES:
+        try:
+            picks = await choose_products(
+                query,
+                quantity=1,
+                ignore_history=False,
+            )
+
+            if picks:
+                await send_product(
+                    app.bot,
+                    TARGET_CHAT_ID,
+                    picks[0]
+                )
+
+                STATE["last_error"] = None
+                break
+
+        except Exception as e:
+            STATE["last_error"] = (
+                f"{query}: "
+                f"{type(e).__name__}: "
+                f"{str(e)[:100]}"
+            )
+
+    STATE["cycles"] += 1
+
+    STATE["last_run"] = datetime.now().strftime(
+        "%d/%m/%Y %H:%M"
+    )
+
+
+async def auto_worker(app):
+    await asyncio.sleep(12)
+
+    while True:
+        try:
+            if STATE["auto"]:
+                await auto_cycle(app)
+
+        except Exception as e:
+            STATE["last_error"] = (
+                f"{type(e).__name__}: "
+                f"{str(e)[:120]}"
+            )
+
+        await asyncio.sleep(
+            AUTO_INTERVAL_MINUTES * 60
+        )
+
+
+async def post_init(app):
+    asyncio.create_task(
+        auto_worker(app)
+    )
+
+
+async def buttons(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    q = update.callback_query
+
+    await q.answer()
+
+    if q.data == "auto_on":
+        STATE["auto"] = True
+
+        await q.message.reply_text(
+            "Modo automático ligado.",
+            reply_markup=menu()
+        )
+
+    elif q.data == "auto_off":
+        STATE["auto"] = False
+
+        await q.message.reply_text(
+            "Modo automático pausado.",
+            reply_markup=menu()
+        )
+
+    elif q.data == "status":
+        last = (
+            STATE["last_run"]
+            or "ainda não executou"
+        )
+
+        err = (
+            STATE["last_error"]
+            or "nenhum"
+        )
+
+        await q.message.reply_text(
+            f"Modo automático: "
+            f"{'LIGADO' if STATE['auto'] else 'PAUSADO'}\n"
+            f"Intervalo: {AUTO_INTERVAL_MINUTES} min\n"
+            f"Desconto mínimo: {MIN_DISCOUNT}%\n"
+            f"Última execução: {last}\n"
+            f"Ciclos: {STATE['cycles']} | "
+            f"Posts: {STATE['posts']}\n"
+            f"Último erro: {err}",
+            reply_markup=menu()
+        )
+
+    elif q.data == "help_search":
+        await q.message.reply_text(
+            "Digite, por exemplo:\n"
+            "/buscar perfume importado"
+        )
+
+
+def main():
+    if not TOKEN:
+        raise RuntimeError(
+            "TELEGRAM_BOT_TOKEN não configurado"
+        )
+
+    db_init()
+
+    app = (
+        Application.builder()
+        .token(TOKEN)
+        .post_init(post_init)
+        .build()
+    )
+
+    app.add_handler(
+        CommandHandler("start", start)
+    )
+
+    app.add_handler(
+        CommandHandler("buscar", buscar)
+    )
+
+    app.add_handler(
+        CommandHandler("status", status)
+    )
+
+    app.add_handler(
+        CommandHandler("limpar", limpar)
+    )
+
+    app.add_handler(
+        CommandHandler("iniciar", iniciar)
+    )
+
+    app.add_handler(
+        CommandHandler("pausar", pausar)
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(buttons)
+    )
+
+    app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
+
+
+if __name__ == "__main__":
+    main()
+PY
+
 ENV PYTHONUNBUFFERED=1
-CMD ["python", "/app/run.py"]
+
+CMD ["python", "/app/bot.py"]
