@@ -8,8 +8,7 @@ RUN pip install --no-cache-dir \
     python-telegram-bot==21.6 \
     playwright==1.48.0 \
     beautifulsoup4==4.12.3 \
-    httpx==0.27.2 \
-    python-dotenv==1.0.1
+    httpx==0.27.2
 
 RUN cat > /app/bot.py <<'PY'
 import os
@@ -18,12 +17,11 @@ import json
 import asyncio
 import sqlite3
 from datetime import datetime
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, unquote, urlparse, parse_qs
 
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -35,10 +33,10 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TARGET_CHAT_ID = os.getenv("TARGET_CHAT_ID", "").strip()
 
 MIN_DISCOUNT = int(os.getenv("MIN_DISCOUNT", "0"))
-MAX_RESULTS = int(os.getenv("MAX_RESULTS", "5"))
-
+MAX_RESULTS = max(1, int(os.getenv("MAX_RESULTS", "5")))
 AUTO_INTERVAL_MINUTES = max(
-    5, int(os.getenv("AUTO_INTERVAL_MINUTES", "15"))
+    5,
+    int(os.getenv("AUTO_INTERVAL_MINUTES", "15"))
 )
 
 AUTO_QUERIES = [
@@ -50,6 +48,8 @@ AUTO_QUERIES = [
     if x.strip()
 ]
 
+DB_PATH = "/app/garimpando.db"
+
 STATE = {
     "auto": True,
     "last_run": None,
@@ -58,45 +58,48 @@ STATE = {
     "posts": 0,
 }
 
-DB_PATH = "/app/garimpando.db"
+DIAG = {
+    "source": "nenhuma",
+    "urls_found": 0,
+    "products": 0,
+    "last_query": "",
+    "last_title": "",
+}
 
 
-def db_connect():
+def db():
     return sqlite3.connect(DB_PATH)
 
 
-def db_init():
-    with db_connect() as con:
-        con.execute(
-            """
+def init_db():
+    with db() as con:
+        con.execute("""
             CREATE TABLE IF NOT EXISTS seen (
                 url TEXT PRIMARY KEY,
                 title TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
-            """
-        )
+        """)
 
 
-def db_has(url):
-    with db_connect() as con:
-        row = con.execute(
+def already_seen(url):
+    with db() as con:
+        return con.execute(
             "SELECT 1 FROM seen WHERE url=?",
             (url,)
-        ).fetchone()
-        return row is not None
+        ).fetchone() is not None
 
 
-def db_add(url, title):
-    with db_connect() as con:
+def remember(url, title):
+    with db() as con:
         con.execute(
             "INSERT OR IGNORE INTO seen(url,title) VALUES (?,?)",
             (url, title)
         )
 
 
-def db_clear():
-    with db_connect() as con:
+def clear_seen():
+    with db() as con:
         con.execute("DELETE FROM seen")
 
 
@@ -110,7 +113,7 @@ def menu():
             InlineKeyboardButton(
                 "📊 Status",
                 callback_data="status"
-            ),
+            )
         ],
         [
             InlineKeyboardButton(
@@ -120,289 +123,263 @@ def menu():
             InlineKeyboardButton(
                 "⏸️ Pausar",
                 callback_data="auto_off"
-            ),
-        ],
+            )
+        ]
     ])
 
 
-def brl(value):
+def money(value):
     if value is None:
-        return "Consulte o preço"
-
-    text = f"{value:,.2f}"
-    text = text.replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"R$ {text}"
-
-
-def parse_money(text):
-    if not text:
         return None
 
+    try:
+        value = float(value)
+    except Exception:
+        return None
+
+    txt = f"{value:,.2f}"
+    txt = txt.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {txt}"
+
+
+def clean_ml_url(url):
+    if not url:
+        return ""
+
+    url = unquote(url)
+
+    if "uddg=" in url:
+        try:
+            qs = parse_qs(urlparse(url).query)
+            if "uddg" in qs:
+                url = qs["uddg"][0]
+        except Exception:
+            pass
+
+    if "mercadolivre.com.br" not in url.lower():
+        return ""
+
+    url = url.split("#")[0]
+
+    bad = [
+        "/ajuda/",
+        "/institucional/",
+        "/ofertas/",
+        "/categorias/",
+        "/lista/",
+    ]
+
+    if any(x in url.lower() for x in bad):
+        return ""
+
+    return url
+
+
+def first_number(text):
+    if text is None:
+        return None
+
+    text = str(text).strip()
+
+    try:
+        return float(text)
+    except Exception:
+        pass
+
     m = re.search(
-        r"R\$\s*([\d\.]+)(?:,(\d{1,2}))?",
+        r"([\d\.]+)(?:,(\d{1,2}))?",
         text
     )
 
     if not m:
         return None
 
-    inteiro = m.group(1).replace(".", "")
+    integer = m.group(1).replace(".", "")
     decimal = m.group(2) or "00"
 
     try:
-        return float(f"{inteiro}.{decimal}")
+        return float(f"{integer}.{decimal}")
     except Exception:
         return None
 
 
-def clean_url(url):
-    if not url:
-        return ""
+async def new_browser(p):
+    browser = await p.chromium.launch(
+        headless=True,
+        args=[
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-blink-features=AutomationControlled",
+        ],
+    )
 
-    url = url.split("#")[0]
+    context = await browser.new_context(
+        locale="pt-BR",
+        viewport={
+            "width": 1365,
+            "height": 900
+        },
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        ),
+    )
 
-    if "mercadolivre.com.br" not in url:
-        return ""
-
-    if "/p/" in url:
-        return url
-
-    if "/MLB-" in url or "MLB-" in url:
-        return url
-
-    return url
+    return browser, context
 
 
-async def scrape_mercado_livre(query, limit=20):
+async def direct_ml_urls(context, query, limit=20):
     slug = quote_plus(query).replace("+", "-")
-    url = f"https://lista.mercadolivre.com.br/{slug}"
 
-    products = []
+    candidates = [
+        f"https://lista.mercadolivre.com.br/{slug}",
+        f"https://www.mercadolivre.com.br/ofertas?search={quote_plus(query)}",
+    ]
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled",
-            ],
-        )
+    urls = []
 
-        context = await browser.new_context(
-            locale="pt-BR",
-            viewport={"width": 1365, "height": 900},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/131.0.0.0 Safari/537.36"
-            ),
-        )
-
+    for search_url in candidates:
         page = await context.new_page()
 
         try:
-            await page.goto(
-                url,
+            response = await page.goto(
+                search_url,
                 wait_until="domcontentloaded",
-                timeout=60000,
+                timeout=45000,
             )
 
-            await page.wait_for_timeout(4000)
+            await page.wait_for_timeout(3500)
 
-            try:
-                await page.mouse.wheel(0, 1600)
-                await page.wait_for_timeout(1200)
-            except Exception:
-                pass
+            DIAG["last_title"] = (
+                await page.title()
+            )[:120]
 
-            html = await page.content()
+            hrefs = await page.locator("a").evaluate_all(
+                "(els) => els.map(a => a.href)"
+            )
+
+            for href in hrefs:
+                good = clean_ml_url(href)
+
+                if good and good not in urls:
+                    urls.append(good)
+
+                if len(urls) >= limit:
+                    break
+
+        except Exception as e:
+            STATE["last_error"] = (
+                f"ML direto: {type(e).__name__}"
+            )
 
         finally:
-            await browser.close()
+            await page.close()
 
-    soup = BeautifulSoup(html, "html.parser")
-
-    selectors = [
-        "li.ui-search-layout__item",
-        "div.ui-search-result__wrapper",
-        "[class*='ui-search-layout__item']",
-        "[class*='poly-card']",
-        "[class*='ui-search-result']",
-    ]
-
-    cards = []
-
-    for selector in selectors:
-        found = soup.select(selector)
-
-        if len(found) >= 3:
-            cards = found
+        if urls:
+            DIAG["source"] = "Mercado Livre direto"
             break
 
-    seen_urls = set()
+    return urls[:limit]
 
-    for card in cards:
-        anchors = card.find_all("a", href=True)
 
-        href = ""
-        title = ""
+async def bing_urls(context, query, limit=20):
+    q = quote_plus(
+        f'site:mercadolivre.com.br "{query}"'
+    )
 
-        for a in anchors:
-            candidate = clean_url(a.get("href", ""))
+    url = f"https://www.bing.com/search?q={q}"
 
-            if not candidate:
-                continue
+    page = await context.new_page()
+    urls = []
 
-            href = candidate
+    try:
+        await page.goto(
+            url,
+            wait_until="domcontentloaded",
+            timeout=45000,
+        )
 
-            title_node = (
-                a.select_one(
-                    ".poly-component__title"
-                )
-                or a.select_one(
-                    ".ui-search-item__title"
-                )
-                or a.select_one("h2")
-            )
+        await page.wait_for_timeout(2500)
 
-            if title_node:
-                title = title_node.get_text(
-                    " ",
-                    strip=True
-                )
+        hrefs = await page.locator("a").evaluate_all(
+            "(els) => els.map(a => a.href)"
+        )
 
-            if not title:
-                title = a.get_text(
-                    " ",
-                    strip=True
-                )
+        for href in hrefs:
+            good = clean_ml_url(href)
 
-            if href:
+            if good and good not in urls:
+                urls.append(good)
+
+            if len(urls) >= limit:
                 break
 
-        if not href or href in seen_urls:
-            continue
-
-        if not title or len(title) < 5:
-            title_node = (
-                card.select_one(".poly-component__title")
-                or card.select_one(".ui-search-item__title")
-                or card.select_one("h2")
-                or card.select_one("h3")
-            )
-
-            if title_node:
-                title = title_node.get_text(
-                    " ",
-                    strip=True
-                )
-
-        if not title or len(title) < 5:
-            continue
-
-        text = card.get_text(
-            " ",
-            strip=True
+    except Exception as e:
+        STATE["last_error"] = (
+            f"Bing: {type(e).__name__}"
         )
 
-        prices = []
+    finally:
+        await page.close()
 
-        for money_el in card.select(
-            ".andes-money-amount, "
-            "[class*='money-amount']"
-        ):
-            value = parse_money(
-                money_el.get_text(
-                    " ",
-                    strip=True
-                )
-            )
+    if urls:
+        DIAG["source"] = "Bing"
 
-            if value and value not in prices:
-                prices.append(value)
+    return urls[:limit]
 
-        if not prices:
-            for raw in re.findall(
-                r"R\$\s*[\d\.]+(?:,\d{1,2})?",
-                text
-            ):
-                value = parse_money(raw)
 
-                if value and value not in prices:
-                    prices.append(value)
+async def duck_urls(context, query, limit=20):
+    q = quote_plus(
+        f'site:mercadolivre.com.br "{query}"'
+    )
 
-        price = None
-        old_price = None
+    url = f"https://html.duckduckgo.com/html/?q={q}"
 
-        if prices:
-            price = prices[-1]
+    page = await context.new_page()
+    urls = []
 
-            if len(prices) >= 2:
-                possible_old = prices[0]
-
-                if possible_old > price:
-                    old_price = possible_old
-
-        discount = None
-
-        dm = re.search(
-            r"(\d{1,2})\s*%\s*(?:OFF|off|desconto)?",
-            text
+    try:
+        await page.goto(
+            url,
+            wait_until="domcontentloaded",
+            timeout=45000,
         )
 
-        if dm:
-            try:
-                discount = int(dm.group(1))
-            except Exception:
-                pass
+        await page.wait_for_timeout(2500)
 
-        if (
-            discount is None
-            and price
-            and old_price
-            and old_price > price
-        ):
-            discount = round(
-                (1 - price / old_price) * 100
-            )
+        hrefs = await page.locator("a").evaluate_all(
+            "(els) => els.map(a => a.href)"
+        )
 
-        image = ""
+        for href in hrefs:
+            good = clean_ml_url(href)
 
-        img = card.find("img")
+            if good and good not in urls:
+                urls.append(good)
 
-        if img:
-            image = (
-                img.get("data-src")
-                or img.get("data-lazy")
-                or img.get("src")
-                or ""
-            )
+            if len(urls) >= limit:
+                break
 
-        shipping = ""
+    except Exception as e:
+        STATE["last_error"] = (
+            f"DuckDuckGo: {type(e).__name__}"
+        )
 
-        if "frete grátis" in text.lower():
-            shipping = "Frete grátis"
+    finally:
+        await page.close()
 
-        products.append({
-            "title": title[:180],
-            "url": href,
-            "image": image,
-            "price": price,
-            "old_price": old_price,
-            "discount": discount,
-            "shipping": shipping,
-        })
+    if urls:
+        DIAG["source"] = "DuckDuckGo"
 
-        seen_urls.add(href)
+    return urls[:limit]
 
-        if len(products) >= limit:
-            break
 
-    if products:
-        return products
+def parse_json_ld(soup):
+    title = ""
+    image = ""
+    price = None
 
-    # Fallback: tenta encontrar produtos estruturados dentro da página
     for script in soup.find_all(
         "script",
         type="application/ld+json"
@@ -417,57 +394,281 @@ async def scrape_mercado_livre(query, limit=20):
         except Exception:
             continue
 
-        blocks = (
+        objects = (
             data
             if isinstance(data, list)
             else [data]
         )
 
-        for block in blocks:
-            if not isinstance(block, dict):
+        for obj in objects:
+            if not isinstance(obj, dict):
                 continue
 
-            items = block.get("itemListElement", [])
+            graph = obj.get("@graph")
 
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-
-                obj = item.get("item", item)
-
-                if not isinstance(obj, dict):
-                    continue
-
-                href = clean_url(
-                    obj.get("url", "")
+            if isinstance(graph, list):
+                objects.extend(
+                    x for x in graph
+                    if isinstance(x, dict)
                 )
 
-                title = (
-                    obj.get("name")
-                    or obj.get("title")
-                    or ""
+            obj_type = str(
+                obj.get("@type", "")
+            ).lower()
+
+            if (
+                "product" not in obj_type
+                and "individualproduct" not in obj_type
+            ):
+                continue
+
+            title = (
+                obj.get("name")
+                or title
+            )
+
+            raw_image = obj.get("image")
+
+            if isinstance(raw_image, str):
+                image = raw_image
+
+            elif isinstance(raw_image, list):
+                if raw_image:
+                    if isinstance(raw_image[0], str):
+                        image = raw_image[0]
+
+                    elif isinstance(raw_image[0], dict):
+                        image = (
+                            raw_image[0].get("url")
+                            or ""
+                        )
+
+            offers = obj.get("offers")
+
+            if isinstance(offers, list):
+                offers = (
+                    offers[0]
+                    if offers
+                    else None
                 )
 
-                if not href or not title:
+            if isinstance(offers, dict):
+                price = first_number(
+                    offers.get("price")
+                    or offers.get("lowPrice")
+                )
+
+            if title:
+                return title, image, price
+
+    return title, image, price
+
+
+async def product_details(context, url):
+    page = await context.new_page()
+
+    try:
+        await page.goto(
+            url,
+            wait_until="domcontentloaded",
+            timeout=45000,
+        )
+
+        await page.wait_for_timeout(2200)
+
+        html = await page.content()
+        final_url = page.url
+
+        soup = BeautifulSoup(
+            html,
+            "html.parser"
+        )
+
+        title = ""
+        image = ""
+        price = None
+        old_price = None
+
+        og_title = soup.select_one(
+            'meta[property="og:title"]'
+        )
+
+        if og_title:
+            title = (
+                og_title.get("content")
+                or ""
+            ).strip()
+
+        og_image = soup.select_one(
+            'meta[property="og:image"]'
+        )
+
+        if og_image:
+            image = (
+                og_image.get("content")
+                or ""
+            ).strip()
+
+        price_meta = (
+            soup.select_one(
+                'meta[property="product:price:amount"]'
+            )
+            or soup.select_one(
+                'meta[itemprop="price"]'
+            )
+        )
+
+        if price_meta:
+            price = first_number(
+                price_meta.get("content")
+                or price_meta.get("value")
+            )
+
+        j_title, j_image, j_price = parse_json_ld(
+            soup
+        )
+
+        title = title or j_title
+        image = image or j_image
+        price = price or j_price
+
+        if not title:
+            h1 = soup.find("h1")
+
+            if h1:
+                title = h1.get_text(
+                    " ",
+                    strip=True
+                )
+
+        body_text = soup.get_text(
+            " ",
+            strip=True
+        )
+
+        if price is None:
+            m = re.search(
+                r"R\$\s*([\d\.]+)(?:,(\d{1,2}))?",
+                body_text
+            )
+
+            if m:
+                integer = m.group(1).replace(".", "")
+                decimal = m.group(2) or "00"
+
+                price = first_number(
+                    f"{integer}.{decimal}"
+                )
+
+        if not title or price is None:
+            return None
+
+        discount = None
+
+        dm = re.search(
+            r"(\d{1,2})\s*%\s*OFF",
+            body_text,
+            re.I
+        )
+
+        if dm:
+            try:
+                discount = int(
+                    dm.group(1)
+                )
+            except Exception:
+                pass
+
+        shipping = ""
+
+        if "frete grátis" in body_text.lower():
+            shipping = "Frete grátis"
+
+        return {
+            "title": title[:180],
+            "url": final_url,
+            "image": image,
+            "price": price,
+            "old_price": old_price,
+            "discount": discount,
+            "shipping": shipping,
+        }
+
+    except Exception as e:
+        STATE["last_error"] = (
+            f"Produto: {type(e).__name__}"
+        )
+
+        return None
+
+    finally:
+        await page.close()
+
+
+async def search_products(query, limit=10):
+    DIAG["last_query"] = query
+    DIAG["source"] = "nenhuma"
+    DIAG["urls_found"] = 0
+    DIAG["products"] = 0
+    DIAG["last_title"] = ""
+
+    async with async_playwright() as p:
+        browser, context = await new_browser(p)
+
+        try:
+            urls = await direct_ml_urls(
+                context,
+                query,
+                limit=25
+            )
+
+            if not urls:
+                urls = await bing_urls(
+                    context,
+                    query,
+                    limit=25
+                )
+
+            if not urls:
+                urls = await duck_urls(
+                    context,
+                    query,
+                    limit=25
+                )
+
+            DIAG["urls_found"] = len(urls)
+
+            products = []
+
+            for url in urls[:12]:
+                item = await product_details(
+                    context,
+                    url
+                )
+
+                if not item:
                     continue
 
-                products.append({
-                    "title": title[:180],
-                    "url": href,
-                    "image": obj.get("image", ""),
-                    "price": None,
-                    "old_price": None,
-                    "discount": None,
-                    "shipping": "",
-                })
+                if item["url"] in [
+                    x["url"]
+                    for x in products
+                ]:
+                    continue
+
+                products.append(item)
 
                 if len(products) >= limit:
-                    return products
+                    break
 
-    return products
+            DIAG["products"] = len(products)
+
+            return products
+
+        finally:
+            await browser.close()
 
 
-def make_caption(p):
+def caption(p):
     lines = [
         "🔥 OFERTA NO MERCADO LIVRE",
         "",
@@ -475,28 +676,17 @@ def make_caption(p):
         "",
     ]
 
-    if (
-        p["old_price"]
-        and p["price"]
-        and p["old_price"] > p["price"]
-    ):
+    if p.get("price") is not None:
         lines.append(
-            f"De {brl(p['old_price'])}"
-        )
-        lines.append(
-            f"Por *{brl(p['price'])}*"
-        )
-    elif p["price"]:
-        lines.append(
-            f"Por *{brl(p['price'])}*"
+            f"Por {money(p['price'])}"
         )
 
-    if p["discount"]:
+    if p.get("discount"):
         lines.append(
             f"💸 {p['discount']}% OFF"
         )
 
-    if p["shipping"]:
+    if p.get("shipping"):
         lines.append(
             f"🚚 {p['shipping']}"
         )
@@ -505,27 +695,32 @@ def make_caption(p):
         "",
         f"🛍️ Comprar: {p['url']}",
         "",
-        "Preço e disponibilidade podem mudar a qualquer momento.",
+        "Preço e disponibilidade podem mudar."
     ])
 
     return "\n".join(lines)
 
 
-async def send_product(bot, chat_id, p):
-    caption = make_caption(p)
+async def send_product(
+    bot,
+    chat_id,
+    product
+):
+    text = caption(product)
 
-    if p.get("image"):
+    image = product.get("image")
+
+    if image:
         try:
             await bot.send_photo(
                 chat_id=chat_id,
-                photo=p["image"],
-                caption=caption,
-                parse_mode=ParseMode.MARKDOWN,
+                photo=image,
+                caption=text,
             )
 
-            db_add(
-                p["url"],
-                p["title"]
+            remember(
+                product["url"],
+                product["title"]
             )
 
             STATE["posts"] += 1
@@ -536,14 +731,13 @@ async def send_product(bot, chat_id, p):
 
     await bot.send_message(
         chat_id=chat_id,
-        text=caption,
-        parse_mode=ParseMode.MARKDOWN,
+        text=text,
         disable_web_page_preview=False,
     )
 
-    db_add(
-        p["url"],
-        p["title"]
+    remember(
+        product["url"],
+        product["title"]
     )
 
     STATE["posts"] += 1
@@ -554,111 +748,62 @@ async def choose_products(
     quantity=5,
     ignore_history=False
 ):
-    products = await scrape_mercado_livre(
+    products = await search_products(
         query,
-        limit=max(20, quantity * 5)
+        limit=max(
+            quantity * 3,
+            8
+        )
     )
 
-    chosen = []
+    selected = []
 
     for p in products:
         if (
             not ignore_history
-            and db_has(p["url"])
+            and already_seen(p["url"])
         ):
             continue
 
         discount = p.get("discount")
 
         if (
-            discount is not None
-            and discount < MIN_DISCOUNT
+            MIN_DISCOUNT > 0
+            and (
+                discount is None
+                or discount < MIN_DISCOUNT
+            )
         ):
             continue
 
-        # Produto sem desconto explícito ainda pode entrar
-        # quando o filtro está em zero.
-        if (
-            discount is None
-            and MIN_DISCOUNT > 0
-        ):
-            continue
+        selected.append(p)
 
-        chosen.append(p)
-
-    chosen.sort(
+    selected.sort(
         key=lambda x: (
             x.get("discount") or 0,
-            bool(x.get("shipping")),
+            bool(x.get("shipping"))
         ),
-        reverse=True,
+        reverse=True
     )
 
-    return chosen[:quantity]
+    return selected[:quantity]
 
 
 async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-    text = (
-        "Garimpando Bot 24H ativo.\n\n"
-        "Você controla tudo por aqui e o servidor "
-        "continua trabalhando sozinho.\n\n"
-        "Comandos:\n"
-        "/buscar air fryer — busca agora\n"
-        "/status — situação do robô\n"
-        "/iniciar — liga o modo automático\n"
-        "/pausar — pausa o modo automático\n"
-        "/limpar — zera produtos já enviados"
-    )
-
     await update.message.reply_text(
-        text,
+        "Garimpando Bot 24H ativo.\n\n"
+        "Comandos:\n"
+        "/buscar perfume\n"
+        "/status\n"
+        "/diagnostico\n"
+        "/iniciar\n"
+        "/pausar\n"
+        "/limpar",
         reply_markup=menu()
     )
-
-
-async def status(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-    last = (
-        STATE["last_run"]
-        or "ainda não executou"
-    )
-
-    err = (
-        STATE["last_error"]
-        or "nenhum"
-    )
-
-    text = (
-        f"Modo automático: "
-        f"{'LIGADO' if STATE['auto'] else 'PAUSADO'}\n"
-        f"Intervalo: {AUTO_INTERVAL_MINUTES} min\n"
-        f"Posts por ciclo: 1\n"
-        f"Desconto mínimo: {MIN_DISCOUNT}%\n"
-        f"Buscas: {', '.join(AUTO_QUERIES)}\n"
-        f"Última execução: {last}\n"
-        f"Ciclos: {STATE['cycles']} | "
-        f"Posts: {STATE['posts']}\n"
-        f"Último erro: {err}\n"
-        f"Afiliado: passthrough"
-    )
-
-    if update.callback_query:
-        await update.callback_query.answer()
-
-        await update.callback_query.message.reply_text(
-            text,
-            reply_markup=menu()
-        )
-    else:
-        await update.message.reply_text(
-            text,
-            reply_markup=menu()
-        )
 
 
 async def buscar(
@@ -671,8 +816,7 @@ async def buscar(
 
     if not query:
         await update.message.reply_text(
-            "Use, por exemplo:\n"
-            "/buscar perfume"
+            "Use: /buscar perfume"
         )
         return
 
@@ -684,32 +828,81 @@ async def buscar(
         selected = await choose_products(
             query,
             quantity=MAX_RESULTS,
-            ignore_history=True,
+            ignore_history=True
         )
 
         if not selected:
             await update.message.reply_text(
-                "Não encontrei produtos nessa busca agora. "
-                "Vou tentar novamente no próximo ciclo."
+                "Não encontrei produtos agora.\n"
+                "Use /diagnostico para ver "
+                "por onde a busca tentou passar."
             )
             return
 
-        for p in selected:
+        for product in selected:
             await send_product(
                 context.bot,
                 update.effective_chat.id,
-                p
+                product
             )
 
         STATE["last_error"] = None
 
     except Exception as e:
         STATE["last_error"] = (
-            f"{type(e).__name__}: {str(e)[:120]}"
+            f"{type(e).__name__}: "
+            f"{str(e)[:120]}"
         )
 
         await update.message.reply_text(
-            f"Erro na busca: {type(e).__name__}"
+            f"Erro: {type(e).__name__}"
+        )
+
+
+async def diagnostico(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    await update.message.reply_text(
+        "Diagnóstico da busca\n\n"
+        f"Última busca: {DIAG['last_query'] or 'nenhuma'}\n"
+        f"Fonte usada: {DIAG['source']}\n"
+        f"Links encontrados: {DIAG['urls_found']}\n"
+        f"Produtos válidos: {DIAG['products']}\n"
+        f"Título recebido: {DIAG['last_title'] or 'não informado'}\n"
+        f"Último erro: {STATE['last_error'] or 'nenhum'}"
+    )
+
+
+async def status(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    text = (
+        f"Modo automático: "
+        f"{'LIGADO' if STATE['auto'] else 'PAUSADO'}\n"
+        f"Intervalo: {AUTO_INTERVAL_MINUTES} min\n"
+        f"Desconto mínimo: {MIN_DISCOUNT}%\n"
+        f"Ciclos: {STATE['cycles']}\n"
+        f"Posts: {STATE['posts']}\n"
+        f"Última execução: "
+        f"{STATE['last_run'] or 'ainda não executou'}\n"
+        f"Último erro: "
+        f"{STATE['last_error'] or 'nenhum'}"
+    )
+
+    if update.callback_query:
+        await update.callback_query.answer()
+
+        await update.callback_query.message.reply_text(
+            text,
+            reply_markup=menu()
+        )
+
+    else:
+        await update.message.reply_text(
+            text,
+            reply_markup=menu()
         )
 
 
@@ -717,10 +910,10 @@ async def limpar(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-    db_clear()
+    clear_seen()
 
     await update.message.reply_text(
-        "Histórico de produtos limpo."
+        "Histórico limpo."
     )
 
 
@@ -731,8 +924,7 @@ async def iniciar(
     STATE["auto"] = True
 
     await update.message.reply_text(
-        "Modo automático ligado.",
-        reply_markup=menu()
+        "Modo automático ligado."
     )
 
 
@@ -743,8 +935,7 @@ async def pausar(
     STATE["auto"] = False
 
     await update.message.reply_text(
-        "Modo automático pausado.",
-        reply_markup=menu()
+        "Modo automático pausado."
     )
 
 
@@ -757,17 +948,17 @@ async def auto_cycle(app):
 
     for query in AUTO_QUERIES:
         try:
-            picks = await choose_products(
+            products = await choose_products(
                 query,
                 quantity=1,
-                ignore_history=False,
+                ignore_history=False
             )
 
-            if picks:
+            if products:
                 await send_product(
                     app.bot,
                     TARGET_CHAT_ID,
-                    picks[0]
+                    products[0]
                 )
 
                 STATE["last_error"] = None
@@ -776,8 +967,7 @@ async def auto_cycle(app):
         except Exception as e:
             STATE["last_error"] = (
                 f"{query}: "
-                f"{type(e).__name__}: "
-                f"{str(e)[:100]}"
+                f"{type(e).__name__}"
             )
 
     STATE["cycles"] += 1
@@ -788,18 +978,17 @@ async def auto_cycle(app):
 
 
 async def auto_worker(app):
-    await asyncio.sleep(12)
+    await asyncio.sleep(30)
 
     while True:
-        try:
-            if STATE["auto"]:
+        if STATE["auto"]:
+            try:
                 await auto_cycle(app)
-
-        except Exception as e:
-            STATE["last_error"] = (
-                f"{type(e).__name__}: "
-                f"{str(e)[:120]}"
-            )
+            except Exception as e:
+                STATE["last_error"] = (
+                    f"{type(e).__name__}: "
+                    f"{str(e)[:100]}"
+                )
 
         await asyncio.sleep(
             AUTO_INTERVAL_MINUTES * 60
@@ -820,59 +1009,39 @@ async def buttons(
 
     await q.answer()
 
-    if q.data == "auto_on":
+    if q.data == "help_search":
+        await q.message.reply_text(
+            "Digite: /buscar perfume"
+        )
+
+    elif q.data == "status":
+        await status(
+            update,
+            context
+        )
+
+    elif q.data == "auto_on":
         STATE["auto"] = True
 
         await q.message.reply_text(
-            "Modo automático ligado.",
-            reply_markup=menu()
+            "Modo automático ligado."
         )
 
     elif q.data == "auto_off":
         STATE["auto"] = False
 
         await q.message.reply_text(
-            "Modo automático pausado.",
-            reply_markup=menu()
-        )
-
-    elif q.data == "status":
-        last = (
-            STATE["last_run"]
-            or "ainda não executou"
-        )
-
-        err = (
-            STATE["last_error"]
-            or "nenhum"
-        )
-
-        await q.message.reply_text(
-            f"Modo automático: "
-            f"{'LIGADO' if STATE['auto'] else 'PAUSADO'}\n"
-            f"Intervalo: {AUTO_INTERVAL_MINUTES} min\n"
-            f"Desconto mínimo: {MIN_DISCOUNT}%\n"
-            f"Última execução: {last}\n"
-            f"Ciclos: {STATE['cycles']} | "
-            f"Posts: {STATE['posts']}\n"
-            f"Último erro: {err}",
-            reply_markup=menu()
-        )
-
-    elif q.data == "help_search":
-        await q.message.reply_text(
-            "Digite, por exemplo:\n"
-            "/buscar perfume importado"
+            "Modo automático pausado."
         )
 
 
 def main():
     if not TOKEN:
         raise RuntimeError(
-            "TELEGRAM_BOT_TOKEN não configurado"
+            "TELEGRAM_BOT_TOKEN ausente"
         )
 
-    db_init()
+    init_db()
 
     app = (
         Application.builder()
@@ -887,6 +1056,10 @@ def main():
 
     app.add_handler(
         CommandHandler("buscar", buscar)
+    )
+
+    app.add_handler(
+        CommandHandler("diagnostico", diagnostico)
     )
 
     app.add_handler(
@@ -911,7 +1084,7 @@ def main():
 
     app.run_polling(
         allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
+        drop_pending_updates=True
     )
 
 
