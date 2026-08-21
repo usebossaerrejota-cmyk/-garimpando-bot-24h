@@ -341,7 +341,8 @@ async def direct_ml_offers(context, query, limit=25):
                 """
                 () => {
                     const cards = document.querySelectorAll(
-                        'li.ui-search-layout__item, div.ui-search-result__wrapper'
+                        'li.ui-search-layout__item, div.ui-search-result__wrapper, ' +
+                        '.poly-card'
                     );
                     const out = [];
                     for (const card of cards) {
