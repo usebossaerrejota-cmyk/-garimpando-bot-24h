@@ -66,6 +66,11 @@ DIAG = {
     "last_title": "",
 }
 
+PRODUCT_URL_RE = re.compile(r"(MLB-?\d{6,}|/p/MLB\d+|/up/MLB\d+)", re.I)
+
+def log(msg):
+    print(f"[garimpando] {msg}", flush=True)
+
 
 def db():
     return sqlite3.connect(DB_PATH)
@@ -172,6 +177,9 @@ def clean_ml_url(url):
     if any(x in url.lower() for x in bad):
         return ""
 
+    if not PRODUCT_URL_RE.search(url):
+        return ""
+
     return url
 
 
@@ -257,6 +265,11 @@ async def direct_ml_urls(context, query, limit=20):
 
             hrefs = await page.locator("a").evaluate_all(
                 "(els) => els.map(a => a.href)"
+            )
+
+            log(
+                f"direct_ml_urls: url={search_url} final_url={page.url} "
+                f"title={DIAG['last_title']!r} total_hrefs={len(hrefs)}"
             )
 
             for href in hrefs:
@@ -560,7 +573,20 @@ async def product_details(context, url):
                     f"{integer}.{decimal}"
                 )
 
+        generic_titles = {"mercado libre", "mercado livre", ""}
+
+        if (title or "").strip().lower() in generic_titles:
+            log(
+                f"product_details: possivel bloqueio/pagina generica em {url} "
+                f"-> final_url={final_url} title={title!r}"
+            )
+            return None
+
         if not title or price is None:
+            log(
+                f"product_details: sem titulo/preco em {url} -> "
+                f"final_url={final_url} title={title!r} price={price}"
+            )
             return None
 
         discount = None
@@ -584,6 +610,11 @@ async def product_details(context, url):
         if "frete grátis" in body_text.lower():
             shipping = "Frete grátis"
 
+        log(
+            f"product_details: OK title={title[:60]!r} price={price} "
+            f"url={final_url}"
+        )
+
         return {
             "title": title[:180],
             "url": final_url,
@@ -599,6 +630,8 @@ async def product_details(context, url):
             f"Produto: {type(e).__name__}"
         )
 
+        log(f"product_details: ERROR em {url}: {type(e).__name__}: {e}")
+
         return None
 
     finally:
@@ -611,6 +644,8 @@ async def search_products(query, limit=10):
     DIAG["urls_found"] = 0
     DIAG["products"] = 0
     DIAG["last_title"] = ""
+
+    log(f"search_products: iniciando busca por {query!r}")
 
     async with async_playwright() as p:
         browser, context = await new_browser(p)
@@ -637,6 +672,8 @@ async def search_products(query, limit=10):
                 )
 
             DIAG["urls_found"] = len(urls)
+
+            log(f"search_products: {len(urls)} URLs candidatas encontradas")
 
             products = []
 
